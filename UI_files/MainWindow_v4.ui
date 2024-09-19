@@ -1,0 +1,856 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>800</width>
+    <height>600</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>16777215</height>
+   </size>
+  </property>
+  <property name="focusPolicy">
+   <enum>Qt::NoFocus</enum>
+  </property>
+  <property name="windowTitle">
+   <string>Mesh Labeler -- Powered by SOVE Inc.</string>
+  </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>SOVE_logo.png</normaloff>SOVE_logo.png</iconset>
+  </property>
+  <property name="styleSheet">
+   <string notr="true"/>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="1" column="0" rowspan="3">
+     <widget class="QFrame" name="frame">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>600</width>
+        <height>450</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(170, 255, 127);</string>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QGroupBox" name="groupBox">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>150</width>
+        <height>50</height>
+       </size>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_3">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="sizeConstraint">
+        <enum>QLayout::SetMinAndMaxSize</enum>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QPushButton" name="pushButton_save">
+         <property name="minimumSize">
+          <size>
+           <width>90</width>
+           <height>50</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font: 75 20px &quot;MS Shell Dlg 2&quot;;</string>
+         </property>
+         <property name="text">
+          <string>Save</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboBox_save_type">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>50</width>
+           <height>50</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font: 75 20px &quot;MS Shell Dlg 2&quot;;</string>
+         </property>
+         <item>
+          <property name="text">
+           <string>VTP</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>STL</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>OBJ</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QPushButton" name="pushButton_load">
+      <property name="minimumSize">
+       <size>
+        <width>150</width>
+        <height>50</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">font: 75 20px &quot;MS Shell Dlg 2&quot;;</string>
+      </property>
+      <property name="text">
+       <string>Load</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QTableWidget" name="tableWidget">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>180</width>
+        <height>320</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">font: 10px &quot;MS Shell Dlg 2&quot;;</string>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="sizeAdjustPolicy">
+       <enum>QAbstractScrollArea::AdjustToContentsOnFirstShow</enum>
+      </property>
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
+      </property>
+      <property name="tabKeyNavigation">
+       <bool>false</bool>
+      </property>
+      <property name="showDropIndicator" stdset="0">
+       <bool>true</bool>
+      </property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::NoSelection</enum>
+      </property>
+      <property name="rowCount">
+       <number>25</number>
+      </property>
+      <property name="columnCount">
+       <number>4</number>
+      </property>
+      <attribute name="horizontalHeaderDefaultSectionSize">
+       <number>65</number>
+      </attribute>
+      <attribute name="horizontalHeaderHighlightSections">
+       <bool>true</bool>
+      </attribute>
+      <attribute name="horizontalHeaderMinimumSectionSize">
+       <number>20</number>
+      </attribute>
+      <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
+       <bool>false</bool>
+      </attribute>
+      <attribute name="horizontalHeaderStretchLastSection">
+       <bool>false</bool>
+      </attribute>
+      <attribute name="verticalHeaderVisible">
+       <bool>false</bool>
+      </attribute>
+      <row>
+       <property name="text">
+        <string>1</string>
+       </property>
+      </row>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <row/>
+      <column>
+       <property name="text">
+        <string>Label</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Color</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Description</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Amount</string>
+       </property>
+      </column>
+      <item row="0" column="1">
+       <property name="text">
+        <string/>
+       </property>
+       <property name="background">
+        <brush brushstyle="SolidPattern">
+         <color alpha="255">
+          <red>85</red>
+          <green>255</green>
+          <blue>0</blue>
+         </color>
+        </brush>
+       </property>
+      </item>
+      <item row="0" column="2">
+       <property name="text">
+        <string>Background</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QLabel" name="label_author_info">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>180</width>
+        <height>100</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">font: 75 14px &quot;MS Shell Dlg 2&quot;;</string>
+      </property>
+      <property name="text">
+       <string>Version: 4.0
+Author:
+Tai-Hsien (Bruce) Wu
+Engineer
+Powered by SOVE Inc.
+soveortho.com</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>600</width>
+        <height>100</height>
+       </size>
+      </property>
+      <property name="focusPolicy">
+       <enum>Qt::StrongFocus</enum>
+      </property>
+      <property name="contextMenuPolicy">
+       <enum>Qt::CustomContextMenu</enum>
+      </property>
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tab_brush">
+       <attribute name="title">
+        <string>Brush</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QLabel" name="label_brush_active_label">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="text">
+           <string>Active label:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinBox_brush_active_label">
+          <property name="minimumSize">
+           <size>
+            <width>50</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer_2">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Expanding</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>200</width>
+            <height>50</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_swap">
+       <property name="contextMenuPolicy">
+        <enum>Qt::CustomContextMenu</enum>
+       </property>
+       <attribute name="title">
+        <string>One-Way Swap</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_2">
+        <item>
+         <widget class="QLabel" name="label_swap_original_label">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="text">
+           <string>Original label:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinBox_swap_original_label">
+          <property name="minimumSize">
+           <size>
+            <width>50</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_active_label_3">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>50</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="text">
+           <string>to</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_swap_new_label">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>100</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="text">
+           <string>New label:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="spinBox_swap_new_label">
+          <property name="minimumSize">
+           <size>
+            <width>50</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 16px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_swap_change">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>50</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 75 20px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="text">
+           <string>Change!</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer_3">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Expanding</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>193</width>
+            <height>50</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tab_landmarking">
+       <attribute name="title">
+        <string>Landmarking</string>
+       </attribute>
+       <layout class="QHBoxLayout" name="horizontalLayout_4">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_2">
+          <item>
+           <widget class="QPushButton" name="pushButton_load_fcsv">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string>Load FCSV</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_save_fcsv">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string>Save FCSV</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_3">
+          <item>
+           <widget class="QPushButton" name="pushButton_add_landmark">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string>Add</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_delete_landmark">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string>Delete</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout">
+          <item>
+           <widget class="QPushButton" name="pushButton_rename">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string>Rename</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_relocate">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string>Relocate</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_reset">
+          <property name="text">
+           <string>Reset</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTableWidget" name="tableWidget_landmakring">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>60</height>
+           </size>
+          </property>
+          <property name="focusPolicy">
+           <enum>Qt::NoFocus</enum>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 10px &quot;MS Shell Dlg 2&quot;;</string>
+          </property>
+          <property name="verticalScrollBarPolicy">
+           <enum>Qt::ScrollBarAlwaysOff</enum>
+          </property>
+          <property name="sizeAdjustPolicy">
+           <enum>QAbstractScrollArea::AdjustToContents</enum>
+          </property>
+          <property name="autoScroll">
+           <bool>true</bool>
+          </property>
+          <property name="editTriggers">
+           <set>QAbstractItemView::NoEditTriggers</set>
+          </property>
+          <property name="dragEnabled">
+           <bool>false</bool>
+          </property>
+          <property name="dragDropOverwriteMode">
+           <bool>false</bool>
+          </property>
+          <property name="dragDropMode">
+           <enum>QAbstractItemView::NoDragDrop</enum>
+          </property>
+          <property name="defaultDropAction">
+           <enum>Qt::IgnoreAction</enum>
+          </property>
+          <property name="selectionMode">
+           <enum>QAbstractItemView::SingleSelection</enum>
+          </property>
+          <property name="selectionBehavior">
+           <enum>QAbstractItemView::SelectColumns</enum>
+          </property>
+          <property name="textElideMode">
+           <enum>Qt::ElideLeft</enum>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+          <property name="cornerButtonEnabled">
+           <bool>true</bool>
+          </property>
+          <property name="rowCount">
+           <number>2</number>
+          </property>
+          <property name="columnCount">
+           <number>1</number>
+          </property>
+          <attribute name="horizontalHeaderVisible">
+           <bool>false</bool>
+          </attribute>
+          <attribute name="horizontalHeaderCascadingSectionResizes">
+           <bool>false</bool>
+          </attribute>
+          <attribute name="horizontalHeaderHighlightSections">
+           <bool>true</bool>
+          </attribute>
+          <attribute name="horizontalHeaderMinimumSectionSize">
+           <number>25</number>
+          </attribute>
+          <attribute name="verticalHeaderVisible">
+           <bool>false</bool>
+          </attribute>
+          <attribute name="verticalHeaderCascadingSectionResizes">
+           <bool>false</bool>
+          </attribute>
+          <attribute name="verticalHeaderDefaultSectionSize">
+           <number>25</number>
+          </attribute>
+          <attribute name="verticalHeaderHighlightSections">
+           <bool>true</bool>
+          </attribute>
+          <attribute name="verticalHeaderMinimumSectionSize">
+           <number>25</number>
+          </attribute>
+          <attribute name="verticalHeaderShowSortIndicator" stdset="0">
+           <bool>false</bool>
+          </attribute>
+          <row/>
+          <row/>
+          <column/>
+         </widget>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_5">
+          <item>
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Radius</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QDoubleSpinBox" name="doubleSpinBox_R">
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout_4">
+          <item>
+           <widget class="QPushButton" name="pushButton_move_right">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_move_left">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>25</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font: 75 12px &quot;MS Shell Dlg 2&quot;;</string>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <tabstops>
+  <tabstop>pushButton_load</tabstop>
+  <tabstop>pushButton_save</tabstop>
+  <tabstop>comboBox_save_type</tabstop>
+  <tabstop>spinBox_brush_active_label</tabstop>
+  <tabstop>spinBox_swap_original_label</tabstop>
+  <tabstop>spinBox_swap_new_label</tabstop>
+  <tabstop>pushButton_swap_change</tabstop>
+  <tabstop>tableWidget</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>
