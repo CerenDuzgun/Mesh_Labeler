@@ -18,8 +18,8 @@ from UI_files.MainWindow_v4 import *
 
 class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
     """
-    05/21/2024
-    Mesh Labeler v4.3.1
+    10/18/2024
+    Mesh Labeler v4.3.2
     vedo: 2023.4.6
     vtk: 9.2.6
     chagned:
@@ -167,6 +167,15 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.landmark_selecting = False
         self.vedo_landmarks = []
         self.tableWidget_landmarking_focus = False
+
+        # 10/18/2024; new for v4.3.2
+        self.vedo_landmark_text = Flagpost(txt='',
+                                           base=(0, 0, 0),
+                                           top=(0, 0, 2),
+                                           s=1,
+                                           lw=1,
+                                           alpha=0.0,
+                                           )
 
         ########################
         # setup signals (button, tab, and spinBox)
@@ -468,6 +477,8 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             self.landmarks = landmarks
             self.landmark_names = landmark_names
             self.landmark_exist = True
+
+            self.vp.add(self.vedo_landmark_text)
         except:
             self.show_messageBox(
                 "Check fcsv format!\nYou might see an example on the repository."
@@ -518,6 +529,19 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.vedo_landmarks[self.selected_lmk_idx].c(
                     self.selected_landmark_color
                 )
+                # update text for the selected landmark
+                closest_mesh_pt_ids = self.mesh.closest_point(self.landmarks[self.selected_lmk_idx], n=30, return_point_id=True)
+                closest_mesh_pt_normals = self.mesh.celldata['Normals'][closest_mesh_pt_ids]
+                closest_mesh_pt_mean_normal = np.mean(closest_mesh_pt_normals, axis=0)
+                self.vedo_landmark_text.__init__(
+                    txt=self.landmark_names[self.selected_lmk_idx][0],
+                    base=self.landmarks[self.selected_lmk_idx],
+                    top=self.landmarks[self.selected_lmk_idx] + closest_mesh_pt_mean_normal * 10.0,
+                    c='tomato',
+                    s=1,
+                    lw=1,
+                    alpha=1.0,
+                )
                 self.vp.render(resetcam=False)
         except:
             self.selected_lmk_idx = None  # idx == []
@@ -551,6 +575,16 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         self.landmarks[self.selected_lmk_idx], r=self.landmark_radius
                     ).c(self.selected_landmark_color)
                     self.vp.add(self.vedo_landmarks)
+                    # reset text for the selected landmark
+                    self.vedo_landmark_text.__init__(
+                    txt="",
+                    base=(0, 0, 0),
+                    top=(0, 0, 2),
+                    c='tomato',
+                    s=1,
+                    lw=1,
+                    alpha=0.0,
+                    )
                     self.vp.render(resetcam=False)
 
     def landmarking_onLeftClick(self, evt):
@@ -566,6 +600,21 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.landmarks[self.selected_lmk_idx], r=self.landmark_radius
                 ).c(self.selected_landmark_color)
                 self.vp.add(self.vedo_landmarks)
+
+                # update text for the selected landmark
+                closest_mesh_pt_ids = self.mesh.closest_point(self.landmarks[self.selected_lmk_idx], n=30, return_point_id=True)
+                closest_mesh_pt_normals = self.mesh.celldata['Normals'][closest_mesh_pt_ids]
+                closest_mesh_pt_mean_normal = np.mean(closest_mesh_pt_normals, axis=0)
+                self.vedo_landmark_text.__init__(
+                    txt=self.landmark_names[self.selected_lmk_idx][0],
+                    base=self.landmarks[self.selected_lmk_idx],
+                    top=self.landmarks[self.selected_lmk_idx] + closest_mesh_pt_mean_normal * 10.0,
+                    c='tomato',
+                    s=1,
+                    lw=1,
+                    alpha=1.0,
+                )
+
                 self.vp.render(resetcam=False)
 
                 self.landmark_selecting = False
@@ -577,6 +626,17 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             # reset to red for all landmarks
             for i in range(len(self.vedo_landmarks)):
                 self.vedo_landmarks[i].c(self.landmark_color)
+
+            self.vedo_landmark_text.__init__(
+                    txt="",
+                    base=(0, 0, 0),
+                    top=(0, 0, 2),
+                    c='tomato',
+                    s=1,
+                    lw=1,
+                    alpha=0.0,
+                )
+            self.vp.render(resetcam=False)
 
     def add_new_landmark(self):
         if self.landmark_exist:  # add a new landmark on the existing landmark table
