@@ -1396,7 +1396,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
     @Qt.pyqtSlot()
     def load_mesh(self):
         self.opened_mesh_path, _ = QFileDialog.getOpenFileName(
-            None, "Open File", self.opened_mesh_path, "*.vtp; *.stl; *.obj; *.ply"
+            None, "Open File", self.opened_mesh_path, "Mesh Files (*.vtp *.stl *.obj *.ply)"
         )
 
         try:
