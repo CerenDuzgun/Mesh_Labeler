@@ -169,13 +169,11 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tableWidget_landmarking_focus = False
 
         # 10/18/2024; new for v4.3.2
-        self.vedo_landmark_text = Flagpost(txt='',
-                                           base=(0, 0, 0),
-                                           top=(0, 0, 2),
-                                           s=1,
-                                           lw=1,
-                                           alpha=0.0,
-                                           )
+        self.vedo_landmark_text = Text2D(txt='',
+                                         pos="top-middle",
+                                         s=2,
+                                         bg="tomato",
+                                         alpha=0.0)
 
         ########################
         # setup signals (button, tab, and spinBox)
@@ -530,18 +528,12 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.selected_landmark_color
                 )
                 # update text for the selected landmark
-                closest_mesh_pt_ids = self.mesh.closest_point(self.landmarks[self.selected_lmk_idx], n=30, return_point_id=True)
-                closest_mesh_pt_normals = self.mesh.celldata['Normals'][closest_mesh_pt_ids]
-                closest_mesh_pt_mean_normal = np.mean(closest_mesh_pt_normals, axis=0)
                 self.vedo_landmark_text.__init__(
                     txt=self.landmark_names[self.selected_lmk_idx][0],
-                    base=self.landmarks[self.selected_lmk_idx],
-                    top=self.landmarks[self.selected_lmk_idx] + closest_mesh_pt_mean_normal * 10.0,
-                    c='tomato',
-                    s=1,
-                    lw=1,
-                    alpha=1.0,
-                )
+                    pos="top-middle",
+                    s=2,
+                    bg="tomato",
+                    alpha=1.0)
                 self.vp.render(resetcam=False)
         except:
             self.selected_lmk_idx = None  # idx == []
@@ -578,11 +570,9 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # reset text for the selected landmark
                     self.vedo_landmark_text.__init__(
                     txt="",
-                    base=(0, 0, 0),
-                    top=(0, 0, 2),
-                    c='tomato',
-                    s=1,
-                    lw=1,
+                    pos="top-middle",
+                    s=2,
+                    bg="tomato",
                     alpha=0.0,
                     )
                     self.vp.render(resetcam=False)
@@ -602,16 +592,11 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.vp.add(self.vedo_landmarks)
 
                 # update text for the selected landmark
-                closest_mesh_pt_ids = self.mesh.closest_point(self.landmarks[self.selected_lmk_idx], n=30, return_point_id=True)
-                closest_mesh_pt_normals = self.mesh.celldata['Normals'][closest_mesh_pt_ids]
-                closest_mesh_pt_mean_normal = np.mean(closest_mesh_pt_normals, axis=0)
                 self.vedo_landmark_text.__init__(
                     txt=self.landmark_names[self.selected_lmk_idx][0],
-                    base=self.landmarks[self.selected_lmk_idx],
-                    top=self.landmarks[self.selected_lmk_idx] + closest_mesh_pt_mean_normal * 10.0,
-                    c='tomato',
-                    s=1,
-                    lw=1,
+                    pos="top-middle",
+                    s=2,
+                    bg="tomato",
                     alpha=1.0,
                 )
 
@@ -629,11 +614,9 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
             self.vedo_landmark_text.__init__(
                     txt="",
-                    base=(0, 0, 0),
-                    top=(0, 0, 2),
-                    c='tomato',
-                    s=1,
-                    lw=1,
+                    pos="top-middle",
+                    s=2,
+                    bg="tomato",
                     alpha=0.0,
                 )
             self.vp.render(resetcam=False)
