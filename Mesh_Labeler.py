@@ -18,13 +18,14 @@ from UI_files.MainWindow_v4 import *
 
 class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
     """
-    10/18/2024
-    Mesh Labeler v4.3.2
+    02/16/2025
+    Mesh Labeler v4.3.3
     vedo: 2023.4.6
     vtk: 9.2.6
     chagned:
         1. added filling function ("shift" + left click)
         2. added flagepole-type "show label" function (key: "s")
+        3. added texture toggle function (key: "t")
     """
 
     def __init__(self, parent=None):
@@ -1497,17 +1498,19 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 if self.comboBox_save_type.currentText() == "VTP":
                     self.save_data_path, _ = QFileDialog.getSaveFileName(
-                        None, "Save File", self.existed_opened_mesh_path[:-4], "*.vtp"
+                        None, "Save File", self.existed_opened_mesh_path[:-4]+".vtp", "*.vtp"
                     )
                     if self.save_data_path:  # not empty
                         # remove unnecessary arraies
                         self.saved_mesh = self.mesh.clone()
+
                         # self.saved_mesh.polydata().GetPointData().RemoveArray('Normals')
                         # self.saved_mesh.polydata().GetCellData().RemoveArray('Normals')
                         # if self.existed_opened_mesh_path[-4:] == '.obj':
                         #     self.saved_mesh.polydata().GetCellData().RemoveArray('GroupIds')
                         # if self.existed_opened_mesh_path[-4:] == '.ply':
                         #     self.saved_mesh.polydata().GetPointData().RemoveArray('RGBA')
+                        
                         file_io.write(self.saved_mesh, self.save_data_path, binary=True)
                         self.existed_opened_mesh_path = self.save_data_path
                         self.setWindowTitle(
@@ -1520,9 +1523,14 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         self.selected_cell_ids = []
 
                 elif self.comboBox_save_type.currentText() in ["STL", "OBJ"]:
-                    self.save_data_path, _ = QFileDialog.getSaveFileName(
-                        None, "Save File", self.existed_opened_mesh_path[:-4]
-                    )
+                    if self.comboBox_save_type.currentText() == "STL":
+                        self.save_data_path, _ = QFileDialog.getSaveFileName(
+                            None, "Save File", self.existed_opened_mesh_path[:-4] + ".stl", "*.stl"
+                        )
+                    elif self.comboBox_save_type.currentText() == "OBJ":
+                        self.save_data_path, _ = QFileDialog.getSaveFileName(
+                            None, "Save File", self.existed_opened_mesh_path[:-4] + ".obj", "*.obj"
+                        )
                     if self.save_data_path:  # not empty
                         # remove unnecessary arraies
                         self.saved_mesh = self.mesh.clone()
