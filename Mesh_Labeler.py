@@ -111,6 +111,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.mesh_wireframe_show = False # no wireframe as default
         self.opened_mesh_path = os.getcwd()
         self.existed_opened_mesh_path = os.getcwd()
+        self.texture_toggle = False
         self.reset_plotters()
 
         self.spinBox_brush_active_label.setRange(
@@ -379,6 +380,19 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         """
         self.mesh_exist = True  # new in v3.0
         self.mesh = load(self.opened_mesh_path)
+        self.mesh_w_texture = self.mesh.clone()
+
+        if 'RGB' in self.mesh_w_texture.pointdata.keys():
+            RGB_array = self.mesh_w_texture.pointdata['RGB']
+        elif 'RGBA' in self.mesh_w_texture.pointdata.keys():
+            RGBA_array = self.mesh_w_texture.pointdata['RGBA']
+            RGB_array = RGBA_array[:,0:3]
+        else:
+            RGB_array = np.ones((self.mesh.npoints, 3)) * 255 # default white
+        RGB_array = RGB_array.astype(np.uint8)
+        self.mesh_w_texture.pointdata["RGB"] = RGB_array
+        self.mesh_w_texture.pointdata.select('RGB')
+
         # self.mesh = load("Example_01.vtp")
         self.mesh_cms = Points(self.mesh.cell_centers())
         self.mesh.linecolor('black').linewidth(
@@ -920,6 +934,19 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # reset
                     self.caption_meshes = []
                     self.tooth_legend = []
+            elif evt.keypress in ["t", "T"]:  # click c to clean all selection
+                # toggle texture_toggle
+                self.texture_toggle = not self.texture_toggle
+                if self.texture_toggle:
+                    self.vp.remove(self.mesh)
+                    self.mesh_w_texture.pointdata.select("RGB")
+                    self.vp.add(self.mesh_w_texture)
+                    self.vp.render(resetcam=False)
+                else:
+                    self.vp.remove(self.mesh_w_texture)
+                    self.mesh.celldata.select('Label')
+                    self.vp.add(self.mesh)
+                    self.vp.render(resetcam=False)
                         
 
     def brush_onRightClick(self, evt):
