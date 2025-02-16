@@ -394,6 +394,8 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.mesh_w_texture.pointdata["RGB"] = RGB_array
         self.mesh_w_texture.pointdata.select('RGB')
 
+        self.mesh.pointdata['RGB'] = RGB_array # also add color to the original mesh
+
         # self.mesh = load("Example_01.vtp")
         self.mesh_cms = Points(self.mesh.cell_centers())
         self.mesh.linecolor('black').linewidth(
