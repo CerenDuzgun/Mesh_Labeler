@@ -54,10 +54,11 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         ###################################################################################
         # read colormap.csv, resize self.tableWidget, and show colormap in self.tableWidget
         ###################################################################################
-        if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "colormap.csv")):
-            csv_relative_path = "colormap.csv" # launch when developing
-        elif os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../colormap.csv")):
-            csv_relative_path = "../colormap.csv" # launch when pynsist
+        colormap_filename = 'colormap.csv'
+        if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), colormap_filename)):
+            csv_relative_path = colormap_filename # launch when developing
+        elif os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../{}".format(colormap_filename))):
+            csv_relative_path = "../{}".format(colormap_filename) # launch when pynsist
 
         self.colormap_csv = pd.read_csv(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), csv_relative_path)
@@ -118,10 +119,13 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.spinBox_brush_active_label.setRange(
             min(self.label_id), max(self.label_id)
         )  # set min and max label id for spinBox
-        self.spinBox_swap_original_label.setRange(
-            min(self.label_id), max(self.label_id)
-        )
-        self.spinBox_swap_new_label.setRange(min(self.label_id), max(self.label_id))
+
+        # comment below to unlock the range of spinBox
+        # self.spinBox_swap_original_label.setRange(
+        #     min(self.label_id), max(self.label_id)
+        # )
+        # self.spinBox_swap_new_label.setRange(min(self.label_id), max(self.label_id))
+        
         # default active label = 0
         self.brush_active_label = [0]  
         self.swap_original_label = [0]
@@ -910,7 +914,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.statusBar().showMessage(self.instruction)
 
             elif evt.keypress in ["s", "S"]:  # click s to show label
-                self.caption_mode = not self.caption_mode  # toggle brush mode
+                self.caption_mode = not self.caption_mode  # toggle caption mode
 
                 if self.caption_mode:
                     unique_labels = np.unique(self.mesh.celldata["Label"])
@@ -950,6 +954,36 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.mesh.celldata.select('Label')
                     self.vp.add(self.mesh)
                     self.vp.render(resetcam=False)
+
+        if self.tabWidget.currentIndex() == 1:  # if in swap mode
+            if evt.keypress in ["s", "S"]:  # click s to show label
+                self.caption_mode = not self.caption_mode  # toggle caption mode
+
+                if self.caption_mode:
+                    unique_labels = np.unique(self.mesh.celldata["Label"])
+                    for i_label in unique_labels:
+                        if i_label != 0:
+                            i_seg = self.mesh.clone().threshold('Label', above=i_label-0.5, below=i_label+0.5, on='cells').alpha(0)
+                            self.caption_meshes.append(i_seg)
+                            if i_seg.ncells > 0:
+                                i_cap = i_seg.caption(
+                                    f"{int(i_label)}",
+                                    point=i_seg.center_of_mass(),
+                                    size=(0.3, 0.06),
+                                    padding=0,
+                                    font="VictorMono",
+                                    alpha=1,)
+                                i_cap.name = f"cap_{i_label}" # <-- this is assigned name for i_seg instead of i_cap
+                                self.tooth_legend.append(i_cap)
+                    
+                    self.vp.add(self.tooth_legend).render()
+                else:
+                    self.vp.remove(self.caption_meshes)
+                    self.vp.remove(self.tooth_legend)
+                    self.vp.render()
+                    # reset
+                    self.caption_meshes = []
+                    self.tooth_legend = []
                         
 
     def brush_onRightClick(self, evt):
@@ -1389,14 +1423,9 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
     @Qt.pyqtSlot()
     def swap_original_label_changed(self):
-        if self.spinBox_swap_original_label.value() in self.label_id:
-            self.swap_original_label = [
-                self.spinBox_swap_original_label.value()
-            ]  # update swap original label
-        else:
-            self.show_messageBox('Label ID does not exist!')
-            # set the value back to the previous one
-            self.spinBox_swap_original_label.setValue(self.swap_original_label[0])
+        self.swap_original_label = [
+            self.spinBox_swap_original_label.value()
+        ]  # update swap original label
 
     @Qt.pyqtSlot()
     def swap_new_label_changed(self):
