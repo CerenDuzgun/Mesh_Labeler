@@ -17,8 +17,166 @@ import vtkmodules
 from UI_files.MainWindow_v4 import *
 import networkx as nx
 import time
+import trimesh
 from sklearn.neighbors import KNeighborsRegressor
+from scipy.linalg import svd
 
+def mesh_to_nx(mesh):
+    G = nx.Graph()
+    for triangle in mesh.cells():
+        G.add_edge(triangle[0], triangle[1])
+        G.add_edge(triangle[1], triangle[2])
+        G.add_edge(triangle[2], triangle[0])
+    return G
+
+def fit_plane(vertices):
+    # Calculate the mean of the vertices
+    center = vertices.mean(axis=0)
+    # Normalize the vertices
+    normalized_vertices = vertices - center
+    # Perform Singular Value Decomposition
+    _, _, vh = svd(normalized_vertices)
+    # The normal to the plane is the last singular vector
+    normal = vh[-1]
+    return center, normal
+
+def project_vertices(vertices, center, normal):
+    projected = []
+    for v in vertices:
+        # Vector from center to a vertex
+        vec = v - center
+        # Distance from vertex to the plane
+        distance = np.dot(vec, normal)
+        # Projected point
+        projected_point = v - distance * normal
+        projected.append(projected_point)
+    return np.array(projected)
+
+def find_center(projected_vertices):
+    return projected_vertices.mean(axis=0)
+
+def calculate_angles(vertices, center):
+    angles = []
+    for v in vertices:
+        # Relative vector
+        relative_vector = v - center
+        # Angle calculation
+        angle = np.arctan2(relative_vector[1], relative_vector[0])
+        angles.append(angle)
+    return np.array(angles)
+
+def sort_vertex_indices_by_angle(vertex_indices, angles):
+    return vertex_indices[np.argsort(angles)]
+
+def connect_vertex_indices(G, ordered_vertex_indices):
+    paths = []
+    for i in range(len(ordered_vertex_indices)):
+        start = ordered_vertex_indices[i]
+        end = ordered_vertex_indices[(i + 1) % len(ordered_vertex_indices)]
+        path = get_shortest_path(G, start, end)
+        paths.append(path)
+    return paths
+
+def get_shortest_path(G, start, end):
+    return nx.shortest_path(G, source=start, target=end)
+
+def find_smallest_loop(G, subset_vertex_indices, subset_vertices):
+    center, normal = fit_plane(subset_vertices)
+    projected_vertices = project_vertices(subset_vertices, center, normal)
+    center_of_projected = find_center(projected_vertices)
+    angles = calculate_angles(projected_vertices, center_of_projected)
+    ordered_subset_vertex_indices = sort_vertex_indices_by_angle(subset_vertex_indices, angles)
+    loop_paths = connect_vertex_indices(G, ordered_subset_vertex_indices)
+    smallest_loop = []
+    for path in loop_paths:
+        smallest_loop.extend(path[1:])
+    return smallest_loop
+
+def separate_mesh(mesh, loop, least_component_num=2, component_least_node_num=100, include_boundary=True):
+    """
+    Separates a mesh into components by removing a loop of vertices and optionally extends the loop
+    until desired number/size of components is achieved.
+
+    Args:
+        mesh: The input vedo mesh to separate
+        loop: Initial loop of vertex indices to remove
+        least_component_num: Minimum number of components required (will extend loop if not met)
+        component_least_node_num: Minimum number of nodes required per component
+        include_boundary: If True, includes connected points and edges from the working loop in each component.
+                        If False, returns components as they are after separation. Default is False.
+
+    Returns:
+        List of components (sets of vertex indices) after separation. If include_boundary is True,
+        each component will include connected points and edges from the working loop.
+    """
+    # Convert mesh to a graph
+    G = mesh_to_nx(mesh)
+    print(f'G.number_of_nodes(): {G.number_of_nodes()}')
+
+    # Make a copy of the loop that we can extend
+    working_loop = list(loop)
+    
+    MAX_ITERATION = 10
+    for _ in range(MAX_ITERATION):
+        # Make a copy of G to work with
+        working_G = G.copy()
+        
+        # Remove vertices and edges in the working loop
+        working_G.remove_nodes_from(working_loop)
+        print(f'loop node number: {len(working_loop)}')
+        print(f'G.number_of_nodes(): {working_G.number_of_nodes()}')
+
+        # Find the connected components
+        components = list(sorted(nx.connected_components(working_G), key=len, reverse=True))
+        print(f'component number: {len(components)}')
+        # Filter out small components if threshold specified
+        if component_least_node_num is not None:
+            components = [comp for comp in components if len(comp) >= component_least_node_num]
+            
+        print(f'component number: {len(components)}')
+
+        # Check if we have enough components
+        if least_component_num is None or len(components) >= least_component_num:
+            break
+            
+        # If not enough components, extend the loop
+        # Find edges connected to the loop vertices
+        edge_candidates = []
+        for v in working_loop:
+            edge_candidates.extend(G.edges(v))
+            
+        # Add a new vertex to the loop
+        working_loop_set = set(working_loop)
+        for edge in edge_candidates:
+            if edge[1] not in working_loop_set:
+                working_loop_set.add(edge[1])
+        new_working_loop = list(working_loop_set)
+
+        print('extend the loop')
+        # If we can't extend the loop further, break
+        if len(new_working_loop) == len(working_loop):
+            break
+        working_loop = new_working_loop
+
+    if len(components) < least_component_num:
+        raise ValueError(f'component number: {len(components)} is less than least_component_num: {least_component_num}')
+
+    # If include_boundary is False, return components as they are
+    if not include_boundary:
+        return components
+    
+    # Process each component to include connected points from working loop
+    enhanced_components = [set(comp) for comp in components]
+    working_loop_set = set(working_loop)
+    
+    # For each vertex in working loop, find which components it connects to and update directly
+    for v in working_loop_set:
+        neighbors = set(G.neighbors(v))
+        for i, component in enumerate(components):
+            if neighbors & component:  # If there's any intersection
+                enhanced_components[i].add(v)
+
+    return enhanced_components
 
 def remove_duplicate_faces(faces):
     # Remove duplicate faces
@@ -1013,139 +1171,96 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             elif evt.keypress in ["m", "M"]:  # click t to toggle margin
                 # extract the current given label
                 active_label = self.brush_active_label[0]
-                i_tmp_label = self.mesh.clone().threshold('Label', above=active_label-0.5, below=active_label+0.5, on='cells')
-                i_box = i_tmp_label.box(scale=5.0)
-                i_ROI_mesh = self.mesh_w_texture.clone().cut_with_box(i_box)
+                unique_labels = np.unique(self.mesh.celldata["Label"])
 
-                i_abutment = i_ROI_mesh.clone().threshold(
-                    'Label',
-                    above=active_label-0.5,
-                    below=active_label+0.5,
-                    on='cells'
-                )
-                
-                # project RGB_array to i_ROI_mesh (need to do after cutting)
-                RGB_array = self.mesh_w_texture.pointdata["RGB"]
-                neigh = KNeighborsRegressor(n_neighbors=1)
-                neigh.fit(self.mesh_w_texture.points(), RGB_array)
-                i_ROI_colors = neigh.predict(i_ROI_mesh.points())
-                i_ROI_colors = i_ROI_colors.astype(np.uint8)
-                i_ROI_mesh.pointdata["RGB"] = i_ROI_colors
-                i_ROI_mesh.pointdata.select("RGB")
+                if active_label in unique_labels and active_label != 0:
+                    i_tmp_label = self.mesh.clone().threshold('Label', above=active_label-0.5, below=active_label+0.5, on='cells')
+                    i_box = i_tmp_label.box(scale=5.0)
+                    i_ROI_mesh_w_texture = self.mesh_w_texture.clone().cut_with_box(i_box)
+                    i_ROI_mesh = self.mesh.clone().cut_with_box(i_box)
 
-                # use the boundary as initial margin (spline)
-                max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
-                margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
-                margin_pts.subsample(0.1)
-
-                plt1_camera = self.vp.camera
-                plt2 = Plotter()
-                plt2.show(i_ROI_mesh, interactive=False, camera=plt1_camera)
-                sptool = plt2.add_spline_tool(margin_pts, closed=True)
-                plt2.interactive()
-
-                margin = sptool.spline()
-                plt2_camera = plt2.camera
-                plt2.close() # close the plotter and remove the spline tool
-
-                margin = vedo.Spline(margin.points()[:-1], closed=True, res=500).c("red")
-
-                start_time = time.time()
-                # find the closest point on mesh to the margin
-                closest_pt_ids = []
-                closest_cell_ids = []
-                for i_pt in margin.points():
-                    i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
-                    i_closest_cell_ids = i_ROI_mesh.connected_cells(i_closest_pt_id, return_ids=True)
-                    closest_pt_ids.append(i_closest_pt_id)
-                    closest_cell_ids.extend(i_closest_cell_ids)
-                closest_pt_ids = np.unique(closest_pt_ids)
-                closest_cell_ids = np.unique(closest_cell_ids)
-
-                i_ROI_mesh.celldata['Label'] = np.zeros((i_ROI_mesh.ncells, 1))
-                i_ROI_mesh.celldata["Label"][closest_cell_ids] = 1
-                i_ROI_mesh.celldata.select("Label")
-
-                margin_center = margin.center_of_mass()
-                abutment_center = i_abutment.center_of_mass()
-                tmp_vector = abutment_center - margin_center
-                tmp_vector = tmp_vector / np.linalg.norm(tmp_vector)
-                extended_abutment = abutment_center + tmp_vector * 100.0
-                pts = i_ROI_mesh.intersect_with_line(
-                    margin_center, extended_abutment
-                )
-
-                selected_filling_pt_id = i_ROI_mesh.closest_point(pts[0], return_point_id=True)
-                selected_filling_pt_ids = [selected_filling_pt_id]
-
-                # initial the 1st iteration
-                selected_filling_cell_ids = []
-                tmp_selected_filling_cell_ids = []
-                i_cell_ids = i_ROI_mesh.connected_cells(selected_filling_pt_id, return_ids=True)
-                for j in i_cell_ids:
-                    if i_ROI_mesh.celldata["Label"][j] == 0 and j not in selected_filling_cell_ids:
-                        selected_filling_cell_ids.append(j)
-
-                mesh_cells = i_ROI_mesh.cells()
-                mesh_cells = np.array(mesh_cells)
-
-                # start the self-iteration
-                while len(selected_filling_cell_ids) != len(tmp_selected_filling_cell_ids):
-                    # find the different elements between selected_filling_cell_ids and tmp_selected_filling_cell_ids
-                    diff_cells = list(set(selected_filling_cell_ids) - set(tmp_selected_filling_cell_ids))
-                    # clone the selected_filling_cell_ids list to tmp_selected_filling_cell_ids at the beginning of each iteration
-                    tmp_selected_filling_cell_ids = selected_filling_cell_ids.copy()
-                    
-                    next_round_cell_pts = mesh_cells[diff_cells]
-                    next_round_cell_pts = np.unique(next_round_cell_pts)
-                    for i_pt in next_round_cell_pts:
-                        if i_pt not in selected_filling_pt_ids:
-                            selected_filling_pt_ids.append(i_pt)
-                            ii_cell_ids = i_ROI_mesh.connected_cells(i_pt, return_ids=True)
-                            for j in ii_cell_ids:
-                                if i_ROI_mesh.celldata["Label"][j] == 0 and j not in selected_filling_cell_ids:
-                                    selected_filling_cell_ids.append(j)
-
-                # selected_filling_cell_ids is the result of filling
-                if len(selected_filling_cell_ids) > 0:  # avoid IndexError
-                    i_ROI_mesh.celldata["Label"][selected_filling_cell_ids] = (
-                        1
+                    i_abutment = i_ROI_mesh.clone().threshold(
+                        'Label',
+                        above=active_label-0.5,
+                        below=active_label+0.5,
+                        on='cells'
                     )
-                # i_ROI_mesh.celldata["Label"][closest_cell_ids] = 0
-                tmp_selection = i_ROI_mesh.clone().threshold('Label', above=0.5, below=1.5, on='cells')
-                tmp_boundary_ids = find_largest_boundary_cycle_from_faces(tmp_selection.faces())
-                tmp_boundary_pts = tmp_selection.points()[np.array(tmp_boundary_ids)]
+                    
+                    # recast np.float32 to np.uint8
+                    i_ROI_colors = i_ROI_mesh_w_texture.pointdata["RGB"]
+                    i_ROI_colors = i_ROI_colors.astype(np.uint8)
+                    i_ROI_mesh_w_texture.pointdata["RGB"] = i_ROI_colors
+                    i_ROI_mesh_w_texture.pointdata.select("RGB")
 
-                additional_cell_ids = []
-                for i_pt in tmp_boundary_pts:
-                    i_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
-                    i_closest_cell_ids = i_ROI_mesh.connected_cells(i_pt_id, return_ids=True)
-                    additional_cell_ids.extend(i_closest_cell_ids)
-                additional_cell_ids = np.unique(additional_cell_ids)
-                i_ROI_mesh.celldata["Label"][additional_cell_ids] = 0
-                
-                # project the selected_cell_centers to the margin
-                i_selected_mesh = i_ROI_mesh.clone().threshold('Label', above=0.5, below=1.5, on='cells')
-                selected_cell_centers = i_selected_mesh.cell_centers()
+                    # use the boundary as initial margin (spline)
+                    max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
+                    margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
+                    margin_pts.subsample(0.1)
 
-                new_abutment_cell_ids = []
-                for i_cell in selected_cell_centers:
-                    i_cell_id = self.mesh_cms.closest_point(i_cell, n=1, return_point_id=True)
-                    new_abutment_cell_ids.append(i_cell_id)
-                new_abutment_cell_ids = np.unique(new_abutment_cell_ids)
+                    plt1_camera = self.vp.camera
+                    plt2 = Plotter()
+                    plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
+                    sptool = plt2.add_spline_tool(margin_pts, closed=True)
+                    plt2.interactive()
 
-                # clean the previous cell labeled as active_label
-                previous_selected_cell_ids = self.mesh.celldata['Label'] == active_label
-                self.mesh.celldata['Label'][previous_selected_cell_ids] = 0
-                # assign the new abutment cell ids to the active_label
-                self.mesh.celldata['Label'][new_abutment_cell_ids] = active_label
+                    margin = sptool.spline()
+                    plt2_camera = plt2.camera
+                    plt2.close() # close the plotter and remove the spline tool
 
-                end_time = time.time()
-                print("Time taken to trim abutment: {:.2f} seconds".format(end_time - start_time))
+                    # project all margin.points() on the mesh
+                    vertex_indices_near_crown_boundary = []
+                    mesh_closest_to_crown_boundary_vertex_indices = []
+                    for i_pt in margin.points():
+                        i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=1.0, return_point_id=True)
+                        i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
+                        vertex_indices_near_crown_boundary.extend(i_near_pt_ids)
+                        mesh_closest_to_crown_boundary_vertex_indices.append(i_closest_pt_id)
+                    vertex_indices_near_crown_boundary = np.unique(vertex_indices_near_crown_boundary)
+                    mesh_closest_to_crown_boundary_vertex_indices = np.unique(mesh_closest_to_crown_boundary_vertex_indices)
 
-                self.set_mesh_color()
-                # self.vp.show(self.mesh, resetcam=False)
-                self.vp.show(self.mesh, camera=plt2_camera)
+                    try:
+                        G = mesh_to_nx(i_ROI_mesh).subgraph(vertex_indices_near_crown_boundary)
+
+                        margin_loop = find_smallest_loop(
+                            G, 
+                            mesh_closest_to_crown_boundary_vertex_indices, 
+                            i_ROI_mesh.points()[mesh_closest_to_crown_boundary_vertex_indices],
+                        )
+                    except:
+                        self.show_messageBox("Cannot find the a close loop for trimming!" \
+                        "\nPlease try another spline or add more points on spline.")
+
+                    two_ROI_meshes_pt_ids = separate_mesh(i_ROI_mesh, margin_loop) # return 2 pieces of meshes
+                    i_ROI_mesh1_pt_ids = np.array(list(two_ROI_meshes_pt_ids[0]))
+                    i_ROI_mesh2_pt_ids = np.array(list(two_ROI_meshes_pt_ids[1]))
+                    # check which part has more number of points
+                    if len(i_ROI_mesh1_pt_ids) > len(i_ROI_mesh2_pt_ids):
+                        selected_abutment_pt_ids = i_ROI_mesh2_pt_ids
+                    else:
+                        selected_abutment_pt_ids = i_ROI_mesh1_pt_ids
+
+                    i_ROI_mesh.pointdata['Selection'] = np.zeros((i_ROI_mesh.npoints, 1))
+                    i_ROI_mesh.pointdata["Selection"][selected_abutment_pt_ids] = 1
+                    i_selected_ROI_mesh = i_ROI_mesh.clone().threshold('Selection', above=0.5, below=1.5, on='points')
+
+                    new_selected_cell_ids = []
+                    for i_cell_center in i_selected_ROI_mesh.cell_centers():
+                        i_cell_center = self.mesh_cms.closest_point(i_cell_center, n=1, return_point_id=True)
+                        new_selected_cell_ids.append(i_cell_center)
+                    new_selected_cell_ids = np.unique(new_selected_cell_ids)
+
+                    # undo backup
+                    self.undo_backup()
+
+                    # clean the previous cell labeled as active_label
+                    previous_selected_cell_ids = self.mesh.celldata['Label'] == active_label
+                    self.mesh.celldata['Label'][previous_selected_cell_ids] = 0
+                    # assign the new abutment cell ids to the active_label
+                    self.mesh.celldata['Label'][new_selected_cell_ids] = active_label
+
+                    self.set_mesh_color()
+                    # self.vp.show(self.mesh, resetcam=False)
+                    self.vp.show(self.mesh, camera=plt2_camera)
 
 
         if self.tabWidget.currentIndex() == 1:  # if in swap mode
