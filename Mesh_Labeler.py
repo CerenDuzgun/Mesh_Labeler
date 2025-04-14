@@ -1258,6 +1258,10 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # assign the new abutment cell ids to the active_label
                     self.mesh.celldata['Label'][new_selected_cell_ids] = active_label
 
+                    self.temp_labels = self.mesh.clone().celldata[
+                        "Label"
+                    ]  # save new labels to backup labels
+
                     self.set_mesh_color()
                     # self.vp.show(self.mesh, resetcam=False)
                     self.vp.show(self.mesh, camera=plt2_camera)
