@@ -367,7 +367,7 @@ class Ui_MainWindow(object):
         item = self.tableWidget.item(0, 2)
         item.setText(_translate("MainWindow", "Background"))
         self.tableWidget.setSortingEnabled(__sortingEnabled)
-        self.label_author_info.setText(_translate("MainWindow", "Version: 4.3.3\n"
+        self.label_author_info.setText(_translate("MainWindow", "Version: 4.3.4\n"
 "Author:\n"
 "Tai-Hsien (Bruce) Wu\n"
 "github.com/Tai-Hsien/Mesh_Labeler_open_source"))
