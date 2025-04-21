@@ -29,6 +29,42 @@ def mesh_to_nx(mesh):
         G.add_edge(triangle[2], triangle[0])
     return G
 
+def mesh_to_nx_with_distances_between_vertices_as_weights(mesh, subgraph_vertex_indices=None):
+    # get triangles in subgraph
+    if subgraph_vertex_indices is None:
+        triangles = np.array(mesh.cells())
+    else:
+        np_mesh_triangles = np.array(mesh.cells())
+        np_subgraph_vertex_indices = np.array(subgraph_vertex_indices)
+        triangles = np_mesh_triangles[np.isin(np_mesh_triangles[:, :3], np_subgraph_vertex_indices).all(axis=1)]
+    
+    # get all points
+    vertices = mesh.points()
+    
+    # Create a graph
+    G = nx.Graph()
+    
+    # Process all edges from triangles at once
+    edges = np.vstack([
+        triangles[:, [0, 1]],
+        triangles[:, [1, 2]],
+        triangles[:, [2, 0]]
+    ])
+    
+    # Sort edges to ensure consistent ordering
+    edges = np.sort(edges, axis=1)
+    
+    # Remove duplicate edges
+    unique_edges = np.unique(edges, axis=0)
+    
+    # Add edges with weights to the graph
+    for i, j in unique_edges:
+        # Calculate distance directly only for edges we need
+        weight = np.linalg.norm(vertices[i] - vertices[j])
+        G.add_edge(int(i), int(j), weight=weight)
+    
+    return G
+
 def get_shortest_path(G, start, end):
     return nx.shortest_path(G, source=start, target=end)
 
@@ -1173,19 +1209,18 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     )
 
                     plt1_camera = self.vp.camera
-                    plt2 = Plotter()
+                    plt2 = Plotter(size=(1600, 1600))
                     plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
                     sptool = plt2.add_spline_tool(margin_pts, closed=True)
                     plt2.interactive()
 
-                    margin = sptool.spline()
                     plt2_camera = plt2.camera
                     # plt2.close() # close the plotter and remove the spline tool
 
                     # project all margin.points() on the mesh
                     i_ROI_mesh_vertex_indices_near_init_margin = []
                     i_ROI_mesh_closest_to_init_margin_vertex_indices = []
-                    for i_pt in margin.points():
+                    for i_pt in sptool.nodes():
                         i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=3.0, return_point_id=True)
                         i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
                         i_ROI_mesh_vertex_indices_near_init_margin.extend(i_near_pt_ids)
@@ -1193,13 +1228,13 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     i_ROI_mesh_vertex_indices_near_init_margin = np.unique(i_ROI_mesh_vertex_indices_near_init_margin)
 
                     try:
-                        G = mesh_to_nx(i_ROI_mesh).subgraph(i_ROI_mesh_vertex_indices_near_init_margin)
+                        G = mesh_to_nx_with_distances_between_vertices_as_weights(i_ROI_mesh, i_ROI_mesh_vertex_indices_near_init_margin)
 
                         margin_loop = []
                         for i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices in range(len(i_ROI_mesh_closest_to_init_margin_vertex_indices)):
                             start = i_ROI_mesh_closest_to_init_margin_vertex_indices[i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices]
                             end = i_ROI_mesh_closest_to_init_margin_vertex_indices[(i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices + 1) % len(i_ROI_mesh_closest_to_init_margin_vertex_indices)]
-                            path = get_shortest_path(G, start, end)
+                            path = nx.dijkstra_path(G, start, end)
                             margin_loop.extend(path[1:])
                             
                     except:
