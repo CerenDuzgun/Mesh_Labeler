@@ -29,68 +29,44 @@ def mesh_to_nx(mesh):
         G.add_edge(triangle[2], triangle[0])
     return G
 
-def fit_plane(vertices):
-    # Calculate the mean of the vertices
-    center = vertices.mean(axis=0)
-    # Normalize the vertices
-    normalized_vertices = vertices - center
-    # Perform Singular Value Decomposition
-    _, _, vh = svd(normalized_vertices)
-    # The normal to the plane is the last singular vector
-    normal = vh[-1]
-    return center, normal
-
-def project_vertices(vertices, center, normal):
-    projected = []
-    for v in vertices:
-        # Vector from center to a vertex
-        vec = v - center
-        # Distance from vertex to the plane
-        distance = np.dot(vec, normal)
-        # Projected point
-        projected_point = v - distance * normal
-        projected.append(projected_point)
-    return np.array(projected)
-
-def find_center(projected_vertices):
-    return projected_vertices.mean(axis=0)
-
-def calculate_angles(vertices, center):
-    angles = []
-    for v in vertices:
-        # Relative vector
-        relative_vector = v - center
-        # Angle calculation
-        angle = np.arctan2(relative_vector[1], relative_vector[0])
-        angles.append(angle)
-    return np.array(angles)
-
-def sort_vertex_indices_by_angle(vertex_indices, angles):
-    return vertex_indices[np.argsort(angles)]
-
-def connect_vertex_indices(G, ordered_vertex_indices):
-    paths = []
-    for i in range(len(ordered_vertex_indices)):
-        start = ordered_vertex_indices[i]
-        end = ordered_vertex_indices[(i + 1) % len(ordered_vertex_indices)]
-        path = get_shortest_path(G, start, end)
-        paths.append(path)
-    return paths
+def mesh_to_nx_with_distances_between_vertices_as_weights(mesh, subgraph_vertex_indices=None):
+    # get triangles in subgraph
+    if subgraph_vertex_indices is None:
+        triangles = np.array(mesh.cells())
+    else:
+        np_mesh_triangles = np.array(mesh.cells())
+        np_subgraph_vertex_indices = np.array(subgraph_vertex_indices)
+        triangles = np_mesh_triangles[np.isin(np_mesh_triangles[:, :3], np_subgraph_vertex_indices).all(axis=1)]
+    
+    # get all points
+    vertices = mesh.points()
+    
+    # Create a graph
+    G = nx.Graph()
+    
+    # Process all edges from triangles at once
+    edges = np.vstack([
+        triangles[:, [0, 1]],
+        triangles[:, [1, 2]],
+        triangles[:, [2, 0]]
+    ])
+    
+    # Sort edges to ensure consistent ordering
+    edges = np.sort(edges, axis=1)
+    
+    # Remove duplicate edges
+    unique_edges = np.unique(edges, axis=0)
+    
+    # Add edges with weights to the graph
+    for i, j in unique_edges:
+        # Calculate distance directly only for edges we need
+        weight = np.linalg.norm(vertices[i] - vertices[j])
+        G.add_edge(int(i), int(j), weight=weight)
+    
+    return G
 
 def get_shortest_path(G, start, end):
     return nx.shortest_path(G, source=start, target=end)
-
-def find_smallest_loop(G, subset_vertex_indices, subset_vertices):
-    center, normal = fit_plane(subset_vertices)
-    projected_vertices = project_vertices(subset_vertices, center, normal)
-    center_of_projected = find_center(projected_vertices)
-    angles = calculate_angles(projected_vertices, center_of_projected)
-    ordered_subset_vertex_indices = sort_vertex_indices_by_angle(subset_vertex_indices, angles)
-    loop_paths = connect_vertex_indices(G, ordered_subset_vertex_indices)
-    smallest_loop = []
-    for path in loop_paths:
-        smallest_loop.extend(path[1:])
-    return smallest_loop
 
 def separate_mesh(mesh, loop, least_component_num=2, component_least_node_num=100, include_boundary=True):
     """
@@ -1175,7 +1151,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 if active_label in unique_labels and active_label != 0:
                     i_tmp_label = self.mesh.clone().threshold('Label', above=active_label-0.5, below=active_label+0.5, on='cells')
-                    i_box = i_tmp_label.box(scale=5.0)
+                    i_box = i_tmp_label.box(scale=3.0)
                     i_ROI_mesh_w_texture = self.mesh_w_texture.clone().cut_with_box(i_box)
                     i_ROI_mesh = self.mesh.clone().cut_with_box(i_box)
 
@@ -1197,35 +1173,70 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
                     margin_pts.subsample(0.1)
 
+                    i_ROI_mesh_w_texture_components = i_ROI_mesh_w_texture.clone().split()
+                    i_ROI_mesh_components = i_ROI_mesh.clone().split()
+
+                    # find the cloest component to the margin points
+                    ave_distance_to_margin_of_each_component_list = []
+                    for component_mesh in i_ROI_mesh_w_texture_components:
+                        all_distances_to_margin_list = []
+                        for pt in margin_pts.points():
+                            # Compute the closest point on the component mesh to the margin point
+                            closest_point = component_mesh.closest_point(pt)
+                            
+                            # Compute the distance between the margin point and the closest point on the mesh
+                            dist = ((closest_point - pt) ** 2).sum() ** 0.5  # Euclidean distance
+                            
+                            all_distances_to_margin_list.append(dist)
+                        
+                        # Compute the average distance from all margin points to this component
+                        avg_distance = sum(all_distances_to_margin_list) / len(all_distances_to_margin_list)
+                        ave_distance_to_margin_of_each_component_list.append(avg_distance)
+                    
+                    target_component_index_in_list = ave_distance_to_margin_of_each_component_list.index(
+                        min(ave_distance_to_margin_of_each_component_list)
+                    )
+
+                    # remove the other components
+                    i_ROI_mesh_w_texture = i_ROI_mesh_w_texture_components[target_component_index_in_list]
+                    i_ROI_mesh = i_ROI_mesh_components[target_component_index_in_list]
+
+                    i_abutment = i_ROI_mesh.clone().threshold(
+                        'Label',
+                        above=active_label-0.5,
+                        below=active_label+0.5,
+                        on='cells'
+                    )
+
                     plt1_camera = self.vp.camera
-                    plt2 = Plotter()
+                    plt2 = Plotter(size=(1600, 1600))
                     plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
                     sptool = plt2.add_spline_tool(margin_pts, closed=True)
                     plt2.interactive()
 
-                    margin = sptool.spline()
                     plt2_camera = plt2.camera
-                    plt2.close() # close the plotter and remove the spline tool
+                    # plt2.close() # close the plotter and remove the spline tool
 
                     # project all margin.points() on the mesh
-                    vertex_indices_near_crown_boundary = []
-                    mesh_closest_to_crown_boundary_vertex_indices = []
-                    for i_pt in margin.points():
-                        i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=1.0, return_point_id=True)
+                    i_ROI_mesh_vertex_indices_near_init_margin = []
+                    i_ROI_mesh_closest_to_init_margin_vertex_indices = []
+                    for i_pt in sptool.nodes():
+                        i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=3.0, return_point_id=True)
                         i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
-                        vertex_indices_near_crown_boundary.extend(i_near_pt_ids)
-                        mesh_closest_to_crown_boundary_vertex_indices.append(i_closest_pt_id)
-                    vertex_indices_near_crown_boundary = np.unique(vertex_indices_near_crown_boundary)
-                    mesh_closest_to_crown_boundary_vertex_indices = np.unique(mesh_closest_to_crown_boundary_vertex_indices)
+                        i_ROI_mesh_vertex_indices_near_init_margin.extend(i_near_pt_ids)
+                        i_ROI_mesh_closest_to_init_margin_vertex_indices.append(i_closest_pt_id)
+                    i_ROI_mesh_vertex_indices_near_init_margin = np.unique(i_ROI_mesh_vertex_indices_near_init_margin)
 
                     try:
-                        G = mesh_to_nx(i_ROI_mesh).subgraph(vertex_indices_near_crown_boundary)
+                        G = mesh_to_nx_with_distances_between_vertices_as_weights(i_ROI_mesh, i_ROI_mesh_vertex_indices_near_init_margin)
 
-                        margin_loop = find_smallest_loop(
-                            G, 
-                            mesh_closest_to_crown_boundary_vertex_indices, 
-                            i_ROI_mesh.points()[mesh_closest_to_crown_boundary_vertex_indices],
-                        )
+                        margin_loop = []
+                        for i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices in range(len(i_ROI_mesh_closest_to_init_margin_vertex_indices)):
+                            start = i_ROI_mesh_closest_to_init_margin_vertex_indices[i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices]
+                            end = i_ROI_mesh_closest_to_init_margin_vertex_indices[(i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices + 1) % len(i_ROI_mesh_closest_to_init_margin_vertex_indices)]
+                            path = nx.dijkstra_path(G, start, end)
+                            margin_loop.extend(path[1:])
+                            
                     except:
                         self.show_messageBox("Cannot find the a close loop for trimming!" \
                         "\nPlease try another spline or add more points on spline.")
