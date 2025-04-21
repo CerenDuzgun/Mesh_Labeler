@@ -1166,7 +1166,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     i_ROI_colors = i_ROI_mesh_w_texture.pointdata["RGB"]
                     i_ROI_colors = i_ROI_colors.astype(np.uint8)
                     i_ROI_mesh_w_texture.pointdata["RGB"] = i_ROI_colors
-                    i_ROI_mesh_w_texture.pointdata.select("RGB")
+                    # i_ROI_mesh_w_texture.pointdata.select("RGB") # select RGB data for the mesh later
 
                     # use the boundary as initial margin (spline)
                     max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
@@ -1201,12 +1201,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     i_ROI_mesh_w_texture = i_ROI_mesh_w_texture_components[target_component_index_in_list]
                     i_ROI_mesh = i_ROI_mesh_components[target_component_index_in_list]
 
-                    i_abutment = i_ROI_mesh.clone().threshold(
-                        'Label',
-                        above=active_label-0.5,
-                        below=active_label+0.5,
-                        on='cells'
-                    )
+                    i_ROI_mesh_w_texture.pointdata.select("RGB")
 
                     plt1_camera = self.vp.camera
                     plt2 = Plotter(size=(1600, 1600))
