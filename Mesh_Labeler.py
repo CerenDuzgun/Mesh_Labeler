@@ -1151,7 +1151,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 if active_label in unique_labels and active_label != 0:
                     i_tmp_label = self.mesh.clone().threshold('Label', above=active_label-0.5, below=active_label+0.5, on='cells')
-                    i_box = i_tmp_label.box(scale=5.0)
+                    i_box = i_tmp_label.box(scale=3.0)
                     i_ROI_mesh_w_texture = self.mesh_w_texture.clone().cut_with_box(i_box)
                     i_ROI_mesh = self.mesh.clone().cut_with_box(i_box)
 
