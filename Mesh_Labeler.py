@@ -1197,6 +1197,41 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
                     margin_pts.subsample(0.1)
 
+                    i_ROI_mesh_w_texture_components = i_ROI_mesh_w_texture.clone().split()
+                    i_ROI_mesh_components = i_ROI_mesh.clone().split()
+
+                    # find the cloest component to the margin points
+                    ave_distance_to_margin_of_each_component_list = []
+                    for component_mesh in i_ROI_mesh_w_texture_components:
+                        all_distances_to_margin_list = []
+                        for pt in margin_pts.points():
+                            # Compute the closest point on the component mesh to the margin point
+                            closest_point = component_mesh.closest_point(pt)
+                            
+                            # Compute the distance between the margin point and the closest point on the mesh
+                            dist = ((closest_point - pt) ** 2).sum() ** 0.5  # Euclidean distance
+                            
+                            all_distances_to_margin_list.append(dist)
+                        
+                        # Compute the average distance from all margin points to this component
+                        avg_distance = sum(all_distances_to_margin_list) / len(all_distances_to_margin_list)
+                        ave_distance_to_margin_of_each_component_list.append(avg_distance)
+                    
+                    target_component_index_in_list = ave_distance_to_margin_of_each_component_list.index(
+                        min(ave_distance_to_margin_of_each_component_list)
+                    )
+
+                    # remove the other components
+                    i_ROI_mesh_w_texture = i_ROI_mesh_w_texture_components[target_component_index_in_list]
+                    i_ROI_mesh = i_ROI_mesh_components[target_component_index_in_list]
+
+                    i_abutment = i_ROI_mesh.clone().threshold(
+                        'Label',
+                        above=active_label-0.5,
+                        below=active_label+0.5,
+                        on='cells'
+                    )
+
                     plt1_camera = self.vp.camera
                     plt2 = Plotter()
                     plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
@@ -1205,13 +1240,13 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
                     margin = sptool.spline()
                     plt2_camera = plt2.camera
-                    plt2.close() # close the plotter and remove the spline tool
+                    # plt2.close() # close the plotter and remove the spline tool
 
                     # project all margin.points() on the mesh
                     vertex_indices_near_crown_boundary = []
                     mesh_closest_to_crown_boundary_vertex_indices = []
                     for i_pt in margin.points():
-                        i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=1.0, return_point_id=True)
+                        i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=3.0, return_point_id=True)
                         i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
                         vertex_indices_near_crown_boundary.extend(i_near_pt_ids)
                         mesh_closest_to_crown_boundary_vertex_indices.append(i_closest_pt_id)
