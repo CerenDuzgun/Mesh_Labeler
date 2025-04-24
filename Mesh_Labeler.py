@@ -1171,7 +1171,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # use the boundary as initial margin (spline)
                     max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
                     margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
-                    margin_pts.subsample(0.1)
+                    margin_pts.subsample(0.05)
 
                     i_ROI_mesh_w_texture_components = i_ROI_mesh_w_texture.clone().split()
                     i_ROI_mesh_components = i_ROI_mesh.clone().split()
@@ -1206,8 +1206,25 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     plt1_camera = self.vp.camera
                     plt2 = Plotter(size=(1600, 1600))
                     plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
-                    sptool = plt2.add_spline_tool(margin_pts, closed=True)
+                    sptool = plt2.add_spline_tool(margin_pts, closed=True, ps=16)
                     sptool.representation.SetAlwaysOnTop(False)
+
+                    # Set the camera's focal point to the center of the spline control points
+                    spline_center = np.mean(sptool.nodes(), axis=0)
+                    plt2_camera = plt2.camera
+                    plt2_camera.SetFocalPoint(spline_center)
+
+                    # position the camera at a reasonable distance
+                    plt2_camera_position = plt2_camera.GetPosition()
+                    plt2_camera_focal = plt2_camera.GetFocalPoint()
+                    direction = np.array(plt2_camera_position) - np.array(plt2_camera_focal)
+                    direction_normalized = direction / np.linalg.norm(direction)
+                    new_position = spline_center + direction_normalized * np.linalg.norm(direction) / 2
+                    plt2_camera.SetPosition(new_position)
+
+                    # Update the camera and render
+                    plt2.renderer.ResetCamera()
+                    plt2.render()
 
                     # Add an observer for the interaction event
                     def on_widget_interaction(obj, event):
@@ -1241,11 +1258,18 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
                     plt2_camera = plt2.camera
                     # plt2.close() # close the plotter and remove the spline tool
+                    
+                    # resample the spline points
+                    print(f'original spline draggable points number: {len(sptool.nodes())}')
+                    print(f'original spline all points number: {len(sptool.spline().points())}')
+                    resampled_spline = Spline(sptool.spline().points(), closed=True, res=100)
+                    print(f'resampled spline points number: {len(resampled_spline.points())}')
 
                     # project all margin.points() on the mesh
                     i_ROI_mesh_vertex_indices_near_init_margin = []
                     i_ROI_mesh_closest_to_init_margin_vertex_indices = []
-                    for i_pt in sptool.nodes():
+                    # for i_pt in sptool.nodes(): # <-- only the draggable points from the spline tool are used
+                    for i_pt in resampled_spline.points(): # <-- resampled spline points are used
                         i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=3.0, return_point_id=True)
                         i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
                         i_ROI_mesh_vertex_indices_near_init_margin.extend(i_near_pt_ids)
@@ -1269,12 +1293,21 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     two_ROI_meshes_pt_ids = separate_mesh(i_ROI_mesh, margin_loop) # return 2 pieces of meshes
                     i_ROI_mesh1_pt_ids = np.array(list(two_ROI_meshes_pt_ids[0]))
                     i_ROI_mesh2_pt_ids = np.array(list(two_ROI_meshes_pt_ids[1]))
-                    # check which part has more number of points
-                    if len(i_ROI_mesh1_pt_ids) > len(i_ROI_mesh2_pt_ids):
-                        selected_abutment_pt_ids = i_ROI_mesh2_pt_ids
-                    else:
-                        selected_abutment_pt_ids = i_ROI_mesh1_pt_ids
+                    
+                    # check which part has more number of points that have the same label as active_label
+                    i_ROI_mesh_cells_with_active_label = np.array(i_ROI_mesh.cells())[i_ROI_mesh.celldata['Label'] == active_label]
+                    i_ROI_mesh_point_ids_with_active_label = np.unique(i_ROI_mesh_cells_with_active_label)
+                    # check how many points in i_ROI_mesh1_pt_ids and i_ROI_mesh2_pt_ids are in i_ROI_mesh_point_ids_with_active_label
+                    i_ROI_mesh1_pt_ids_with_active_label = np.intersect1d(i_ROI_mesh1_pt_ids, i_ROI_mesh_point_ids_with_active_label)
+                    i_ROI_mesh2_pt_ids_with_active_label = np.intersect1d(i_ROI_mesh2_pt_ids, i_ROI_mesh_point_ids_with_active_label)
+                    print(f'i_ROI_mesh1_pt_ids_with_active_label number: {len(i_ROI_mesh1_pt_ids_with_active_label)}')
+                    print(f'i_ROI_mesh2_pt_ids_with_active_label number: {len(i_ROI_mesh2_pt_ids_with_active_label)}')
 
+                    if len(i_ROI_mesh1_pt_ids_with_active_label) > len(i_ROI_mesh2_pt_ids_with_active_label):
+                        selected_abutment_pt_ids = i_ROI_mesh1_pt_ids
+                    else:
+                        selected_abutment_pt_ids = i_ROI_mesh2_pt_ids
+                        
                     i_ROI_mesh.pointdata['Selection'] = np.zeros((i_ROI_mesh.npoints, 1))
                     i_ROI_mesh.pointdata["Selection"][selected_abutment_pt_ids] = 1
                     i_selected_ROI_mesh = i_ROI_mesh.clone().threshold('Selection', above=0.5, below=1.5, on='points')
