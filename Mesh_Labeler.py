@@ -1207,6 +1207,36 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     plt2 = Plotter(size=(1600, 1600))
                     plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
                     sptool = plt2.add_spline_tool(margin_pts, closed=True)
+                    sptool.representation.SetAlwaysOnTop(False)
+
+                    # Add an observer for the interaction event
+                    def on_widget_interaction(obj, event):
+                        # This is called whenever the spline is modified
+                        # print("Widget interaction detected") # Debugging
+                        
+                        # Get the current nodes from the spline tool
+                        nodes = sptool.nodes()
+                        
+                        # Snap all nodes to the mesh surface
+                        for i in range(len(nodes)):
+                            # Get current position
+                            pos = nodes[i]
+                            
+                            # Find closest point on mesh
+                            # closest_point = i_ROI_mesh.closest_point(pos) # <-- this is the closest point on the mesh surface
+                            closest_point = Points(i_ROI_mesh.points()).closest_point(pos) # <-- this is the closest point among all the mesh points
+                            
+                            # Update the node position
+                            sptool.representation.SetNthNodeWorldPosition(i, closest_point)
+                            # print(f"Snapped node {i} to mesh") # Debugging
+                        
+                        # Rebuild the representation
+                        sptool.representation.BuildRepresentation()
+                        plt2.render()
+
+                    # Add the observer to the spline tool
+                    sptool.AddObserver("InteractionEvent", on_widget_interaction)
+                    
                     plt2.interactive()
 
                     plt2_camera = plt2.camera
