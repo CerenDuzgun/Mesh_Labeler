@@ -302,6 +302,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.opened_mesh_path = os.getcwd()
         self.existed_opened_mesh_path = os.getcwd()
         self.texture_toggle = False
+        self.margin_mode = False
         self.reset_plotters()
 
         self.spinBox_brush_active_label.setRange(
@@ -1150,191 +1151,195 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 unique_labels = np.unique(self.mesh.celldata["Label"])
 
                 if active_label in unique_labels and active_label != 0:
-                    i_tmp_label = self.mesh.clone().threshold('Label', above=active_label-0.5, below=active_label+0.5, on='cells')
-                    i_box = i_tmp_label.box(scale=3.0)
-                    i_ROI_mesh_w_texture = self.mesh_w_texture.clone().cut_with_box(i_box)
-                    i_ROI_mesh = self.mesh.clone().cut_with_box(i_box)
+                    if self.margin_mode == False: # only enable margin mode when it's not enabled
+                        self.margin_mode = True # disable margin mode to avoid multiple clicks
 
-                    i_abutment = i_ROI_mesh.clone().threshold(
-                        'Label',
-                        above=active_label-0.5,
-                        below=active_label+0.5,
-                        on='cells'
-                    )
-                    
-                    # recast np.float32 to np.uint8
-                    i_ROI_colors = i_ROI_mesh_w_texture.pointdata["RGB"]
-                    i_ROI_colors = i_ROI_colors.astype(np.uint8)
-                    i_ROI_mesh_w_texture.pointdata["RGB"] = i_ROI_colors
-                    # i_ROI_mesh_w_texture.pointdata.select("RGB") # select RGB data for the mesh later
+                        i_tmp_label = self.mesh.clone().threshold('Label', above=active_label-0.5, below=active_label+0.5, on='cells')
+                        i_box = i_tmp_label.box(scale=3.0)
+                        i_ROI_mesh_w_texture = self.mesh_w_texture.clone().cut_with_box(i_box)
+                        i_ROI_mesh = self.mesh.clone().cut_with_box(i_box)
 
-                    # use the boundary as initial margin (spline)
-                    max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
-                    margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
-                    margin_pts.subsample(0.05)
-
-                    i_ROI_mesh_w_texture_components = i_ROI_mesh_w_texture.clone().split()
-                    i_ROI_mesh_components = i_ROI_mesh.clone().split()
-
-                    # find the cloest component to the margin points
-                    ave_distance_to_margin_of_each_component_list = []
-                    for component_mesh in i_ROI_mesh_w_texture_components:
-                        all_distances_to_margin_list = []
-                        for pt in margin_pts.points():
-                            # Compute the closest point on the component mesh to the margin point
-                            closest_point = component_mesh.closest_point(pt)
-                            
-                            # Compute the distance between the margin point and the closest point on the mesh
-                            dist = ((closest_point - pt) ** 2).sum() ** 0.5  # Euclidean distance
-                            
-                            all_distances_to_margin_list.append(dist)
+                        i_abutment = i_ROI_mesh.clone().threshold(
+                            'Label',
+                            above=active_label-0.5,
+                            below=active_label+0.5,
+                            on='cells'
+                        )
                         
-                        # Compute the average distance from all margin points to this component
-                        avg_distance = sum(all_distances_to_margin_list) / len(all_distances_to_margin_list)
-                        ave_distance_to_margin_of_each_component_list.append(avg_distance)
-                    
-                    target_component_index_in_list = ave_distance_to_margin_of_each_component_list.index(
-                        min(ave_distance_to_margin_of_each_component_list)
-                    )
+                        # recast np.float32 to np.uint8
+                        i_ROI_colors = i_ROI_mesh_w_texture.pointdata["RGB"]
+                        i_ROI_colors = i_ROI_colors.astype(np.uint8)
+                        i_ROI_mesh_w_texture.pointdata["RGB"] = i_ROI_colors
+                        # i_ROI_mesh_w_texture.pointdata.select("RGB") # select RGB data for the mesh later
 
-                    # remove the other components
-                    i_ROI_mesh_w_texture = i_ROI_mesh_w_texture_components[target_component_index_in_list]
-                    i_ROI_mesh = i_ROI_mesh_components[target_component_index_in_list]
+                        # use the boundary as initial margin (spline)
+                        max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
+                        margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
+                        margin_pts.subsample(0.05)
 
-                    i_ROI_mesh_w_texture.pointdata.select("RGB")
+                        i_ROI_mesh_w_texture_components = i_ROI_mesh_w_texture.clone().split()
+                        i_ROI_mesh_components = i_ROI_mesh.clone().split()
 
-                    plt1_camera = self.vp.camera
-                    plt2 = Plotter(size=(1600, 1600))
-                    plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
-                    sptool = plt2.add_spline_tool(margin_pts, closed=True, ps=16)
-                    sptool.representation.SetAlwaysOnTop(False)
-
-                    # Set the camera's focal point to the center of the spline control points
-                    spline_center = np.mean(sptool.nodes(), axis=0)
-                    plt2_camera = plt2.camera
-                    plt2_camera.SetFocalPoint(spline_center)
-
-                    # position the camera at a reasonable distance
-                    plt2_camera_position = plt2_camera.GetPosition()
-                    plt2_camera_focal = plt2_camera.GetFocalPoint()
-                    direction = np.array(plt2_camera_position) - np.array(plt2_camera_focal)
-                    direction_normalized = direction / np.linalg.norm(direction)
-                    new_position = spline_center + direction_normalized * np.linalg.norm(direction) / 2
-                    plt2_camera.SetPosition(new_position)
-
-                    # Update the camera and render
-                    plt2.renderer.ResetCamera()
-                    plt2.render()
-
-                    # Add an observer for the interaction event
-                    def on_widget_interaction(obj, event):
-                        # This is called whenever the spline is modified
-                        # print("Widget interaction detected") # Debugging
-                        
-                        # Get the current nodes from the spline tool
-                        nodes = sptool.nodes()
-                        
-                        # Snap all nodes to the mesh surface
-                        for i in range(len(nodes)):
-                            # Get current position
-                            pos = nodes[i]
+                        # find the cloest component to the margin points
+                        ave_distance_to_margin_of_each_component_list = []
+                        for component_mesh in i_ROI_mesh_w_texture_components:
+                            all_distances_to_margin_list = []
+                            for pt in margin_pts.points():
+                                # Compute the closest point on the component mesh to the margin point
+                                closest_point = component_mesh.closest_point(pt)
+                                
+                                # Compute the distance between the margin point and the closest point on the mesh
+                                dist = ((closest_point - pt) ** 2).sum() ** 0.5  # Euclidean distance
+                                
+                                all_distances_to_margin_list.append(dist)
                             
-                            # Find closest point on mesh
-                            # closest_point = i_ROI_mesh.closest_point(pos) # <-- this is the closest point on the mesh surface
-                            closest_point = Points(i_ROI_mesh.points()).closest_point(pos) # <-- this is the closest point among all the mesh points
-                            
-                            # Update the node position
-                            sptool.representation.SetNthNodeWorldPosition(i, closest_point)
-                            # print(f"Snapped node {i} to mesh") # Debugging
+                            # Compute the average distance from all margin points to this component
+                            avg_distance = sum(all_distances_to_margin_list) / len(all_distances_to_margin_list)
+                            ave_distance_to_margin_of_each_component_list.append(avg_distance)
                         
-                        # Rebuild the representation
-                        sptool.representation.BuildRepresentation()
+                        target_component_index_in_list = ave_distance_to_margin_of_each_component_list.index(
+                            min(ave_distance_to_margin_of_each_component_list)
+                        )
+
+                        # remove the other components
+                        i_ROI_mesh_w_texture = i_ROI_mesh_w_texture_components[target_component_index_in_list]
+                        i_ROI_mesh = i_ROI_mesh_components[target_component_index_in_list]
+
+                        i_ROI_mesh_w_texture.pointdata.select("RGB")
+
+                        plt1_camera = self.vp.camera
+                        plt2 = Plotter(size=(1600, 1600))
+                        plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
+                        sptool = plt2.add_spline_tool(margin_pts, closed=True, ps=16)
+                        sptool.representation.SetAlwaysOnTop(False)
+
+                        # Set the camera's focal point to the center of the spline control points
+                        spline_center = np.mean(sptool.nodes(), axis=0)
+                        plt2_camera = plt2.camera
+                        plt2_camera.SetFocalPoint(spline_center)
+
+                        # position the camera at a reasonable distance
+                        plt2_camera_position = plt2_camera.GetPosition()
+                        plt2_camera_focal = plt2_camera.GetFocalPoint()
+                        direction = np.array(plt2_camera_position) - np.array(plt2_camera_focal)
+                        direction_normalized = direction / np.linalg.norm(direction)
+                        new_position = spline_center + direction_normalized * np.linalg.norm(direction) / 2
+                        plt2_camera.SetPosition(new_position)
+
+                        # Update the camera and render
+                        plt2.renderer.ResetCamera()
                         plt2.render()
 
-                    # Add the observer to the spline tool
-                    sptool.AddObserver("InteractionEvent", on_widget_interaction)
-                    
-                    plt2.interactive()
-
-                    plt2_camera = plt2.camera
-                    # plt2.close() # close the plotter and remove the spline tool
-                    
-                    # resample the spline points
-                    print(f'original spline draggable points number: {len(sptool.nodes())}')
-                    print(f'original spline all points number: {len(sptool.spline().points())}')
-                    resampled_spline = Spline(sptool.spline().points(), closed=True, res=100)
-                    print(f'resampled spline points number: {len(resampled_spline.points())}')
-
-                    # project all margin.points() on the mesh
-                    i_ROI_mesh_vertex_indices_near_init_margin = []
-                    i_ROI_mesh_closest_to_init_margin_vertex_indices = []
-                    # for i_pt in sptool.nodes(): # <-- only the draggable points from the spline tool are used
-                    for i_pt in resampled_spline.points(): # <-- resampled spline points are used
-                        i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=3.0, return_point_id=True)
-                        i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
-                        i_ROI_mesh_vertex_indices_near_init_margin.extend(i_near_pt_ids)
-                        i_ROI_mesh_closest_to_init_margin_vertex_indices.append(i_closest_pt_id)
-                    i_ROI_mesh_vertex_indices_near_init_margin = np.unique(i_ROI_mesh_vertex_indices_near_init_margin)
-
-                    try:
-                        G = mesh_to_nx_with_distances_between_vertices_as_weights(i_ROI_mesh, i_ROI_mesh_vertex_indices_near_init_margin)
-
-                        margin_loop = []
-                        for i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices in range(len(i_ROI_mesh_closest_to_init_margin_vertex_indices)):
-                            start = i_ROI_mesh_closest_to_init_margin_vertex_indices[i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices]
-                            end = i_ROI_mesh_closest_to_init_margin_vertex_indices[(i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices + 1) % len(i_ROI_mesh_closest_to_init_margin_vertex_indices)]
-                            path = nx.dijkstra_path(G, start, end)
-                            margin_loop.extend(path[1:])
+                        # Add an observer for the interaction event
+                        def on_widget_interaction(obj, event):
+                            # This is called whenever the spline is modified
+                            # print("Widget interaction detected") # Debugging
                             
-                    except:
-                        self.show_messageBox("Cannot find the a close loop for trimming!" \
-                        "\nPlease try another spline or add more points on spline.")
+                            # Get the current nodes from the spline tool
+                            nodes = sptool.nodes()
+                            
+                            # Snap all nodes to the mesh surface
+                            for i in range(len(nodes)):
+                                # Get current position
+                                pos = nodes[i]
+                                
+                                # Find closest point on mesh
+                                # closest_point = i_ROI_mesh.closest_point(pos) # <-- this is the closest point on the mesh surface
+                                closest_point = Points(i_ROI_mesh.points()).closest_point(pos) # <-- this is the closest point among all the mesh points
+                                
+                                # Update the node position
+                                sptool.representation.SetNthNodeWorldPosition(i, closest_point)
+                                # print(f"Snapped node {i} to mesh") # Debugging
+                            
+                            # Rebuild the representation
+                            sptool.representation.BuildRepresentation()
+                            plt2.render()
 
-                    two_ROI_meshes_pt_ids = separate_mesh(i_ROI_mesh, margin_loop) # return 2 pieces of meshes
-                    i_ROI_mesh1_pt_ids = np.array(list(two_ROI_meshes_pt_ids[0]))
-                    i_ROI_mesh2_pt_ids = np.array(list(two_ROI_meshes_pt_ids[1]))
-                    
-                    # check which part has more number of points that have the same label as active_label
-                    i_ROI_mesh_cells_with_active_label = np.array(i_ROI_mesh.cells())[i_ROI_mesh.celldata['Label'] == active_label]
-                    i_ROI_mesh_point_ids_with_active_label = np.unique(i_ROI_mesh_cells_with_active_label)
-                    # check how many points in i_ROI_mesh1_pt_ids and i_ROI_mesh2_pt_ids are in i_ROI_mesh_point_ids_with_active_label
-                    i_ROI_mesh1_pt_ids_with_active_label = np.intersect1d(i_ROI_mesh1_pt_ids, i_ROI_mesh_point_ids_with_active_label)
-                    i_ROI_mesh2_pt_ids_with_active_label = np.intersect1d(i_ROI_mesh2_pt_ids, i_ROI_mesh_point_ids_with_active_label)
-                    print(f'i_ROI_mesh1_pt_ids_with_active_label number: {len(i_ROI_mesh1_pt_ids_with_active_label)}')
-                    print(f'i_ROI_mesh2_pt_ids_with_active_label number: {len(i_ROI_mesh2_pt_ids_with_active_label)}')
-
-                    if len(i_ROI_mesh1_pt_ids_with_active_label) > len(i_ROI_mesh2_pt_ids_with_active_label):
-                        selected_abutment_pt_ids = i_ROI_mesh1_pt_ids
-                    else:
-                        selected_abutment_pt_ids = i_ROI_mesh2_pt_ids
+                        # Add the observer to the spline tool
+                        sptool.AddObserver("InteractionEvent", on_widget_interaction)
                         
-                    i_ROI_mesh.pointdata['Selection'] = np.zeros((i_ROI_mesh.npoints, 1))
-                    i_ROI_mesh.pointdata["Selection"][selected_abutment_pt_ids] = 1
-                    i_selected_ROI_mesh = i_ROI_mesh.clone().threshold('Selection', above=0.5, below=1.5, on='points')
+                        plt2.interactive()
 
-                    new_selected_cell_ids = []
-                    for i_cell_center in i_selected_ROI_mesh.cell_centers():
-                        i_cell_center = self.mesh_cms.closest_point(i_cell_center, n=1, return_point_id=True)
-                        new_selected_cell_ids.append(i_cell_center)
-                    new_selected_cell_ids = np.unique(new_selected_cell_ids)
+                        plt2_camera = plt2.camera
+                        # plt2.close() # close the plotter and remove the spline tool
+                        
+                        # resample the spline points
+                        print(f'original spline draggable points number: {len(sptool.nodes())}')
+                        print(f'original spline all points number: {len(sptool.spline().points())}')
+                        resampled_spline = Spline(sptool.spline().points(), closed=True, res=100)
+                        print(f'resampled spline points number: {len(resampled_spline.points())}')
 
-                    # undo backup
-                    self.undo_backup()
+                        # project all margin.points() on the mesh
+                        i_ROI_mesh_vertex_indices_near_init_margin = []
+                        i_ROI_mesh_closest_to_init_margin_vertex_indices = []
+                        # for i_pt in sptool.nodes(): # <-- only the draggable points from the spline tool are used
+                        for i_pt in resampled_spline.points(): # <-- resampled spline points are used
+                            i_near_pt_ids = i_ROI_mesh.closest_point(i_pt, radius=3.0, return_point_id=True)
+                            i_closest_pt_id = i_ROI_mesh.closest_point(i_pt, n=1, return_point_id=True)
+                            i_ROI_mesh_vertex_indices_near_init_margin.extend(i_near_pt_ids)
+                            i_ROI_mesh_closest_to_init_margin_vertex_indices.append(i_closest_pt_id)
+                        i_ROI_mesh_vertex_indices_near_init_margin = np.unique(i_ROI_mesh_vertex_indices_near_init_margin)
 
-                    # clean the previous cell labeled as active_label
-                    previous_selected_cell_ids = self.mesh.celldata['Label'] == active_label
-                    self.mesh.celldata['Label'][previous_selected_cell_ids] = 0
-                    # assign the new abutment cell ids to the active_label
-                    self.mesh.celldata['Label'][new_selected_cell_ids] = active_label
+                        try:
+                            G = mesh_to_nx_with_distances_between_vertices_as_weights(i_ROI_mesh, i_ROI_mesh_vertex_indices_near_init_margin)
 
-                    self.temp_labels = self.mesh.clone().celldata[
-                        "Label"
-                    ]  # save new labels to backup labels
+                            margin_loop = []
+                            for i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices in range(len(i_ROI_mesh_closest_to_init_margin_vertex_indices)):
+                                start = i_ROI_mesh_closest_to_init_margin_vertex_indices[i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices]
+                                end = i_ROI_mesh_closest_to_init_margin_vertex_indices[(i_pt_ind_in_i_ROI_mesh_closest_to_init_margin_vertex_indices + 1) % len(i_ROI_mesh_closest_to_init_margin_vertex_indices)]
+                                path = nx.dijkstra_path(G, start, end)
+                                margin_loop.extend(path[1:])
+                                
+                        except:
+                            self.show_messageBox("Cannot find the a close loop for trimming!" \
+                            "\nPlease try another spline or add more points on spline.")
 
-                    self.set_mesh_color()
-                    # self.vp.show(self.mesh, resetcam=False)
-                    self.vp.show(self.mesh, camera=plt2_camera)
+                        two_ROI_meshes_pt_ids = separate_mesh(i_ROI_mesh, margin_loop) # return 2 pieces of meshes
+                        i_ROI_mesh1_pt_ids = np.array(list(two_ROI_meshes_pt_ids[0]))
+                        i_ROI_mesh2_pt_ids = np.array(list(two_ROI_meshes_pt_ids[1]))
+                        
+                        # check which part has more number of points that have the same label as active_label
+                        i_ROI_mesh_cells_with_active_label = np.array(i_ROI_mesh.cells())[i_ROI_mesh.celldata['Label'] == active_label]
+                        i_ROI_mesh_point_ids_with_active_label = np.unique(i_ROI_mesh_cells_with_active_label)
+                        # check how many points in i_ROI_mesh1_pt_ids and i_ROI_mesh2_pt_ids are in i_ROI_mesh_point_ids_with_active_label
+                        i_ROI_mesh1_pt_ids_with_active_label = np.intersect1d(i_ROI_mesh1_pt_ids, i_ROI_mesh_point_ids_with_active_label)
+                        i_ROI_mesh2_pt_ids_with_active_label = np.intersect1d(i_ROI_mesh2_pt_ids, i_ROI_mesh_point_ids_with_active_label)
+                        print(f'i_ROI_mesh1_pt_ids_with_active_label number: {len(i_ROI_mesh1_pt_ids_with_active_label)}')
+                        print(f'i_ROI_mesh2_pt_ids_with_active_label number: {len(i_ROI_mesh2_pt_ids_with_active_label)}')
 
+                        if len(i_ROI_mesh1_pt_ids_with_active_label) > len(i_ROI_mesh2_pt_ids_with_active_label):
+                            selected_abutment_pt_ids = i_ROI_mesh1_pt_ids
+                        else:
+                            selected_abutment_pt_ids = i_ROI_mesh2_pt_ids
+                            
+                        i_ROI_mesh.pointdata['Selection'] = np.zeros((i_ROI_mesh.npoints, 1))
+                        i_ROI_mesh.pointdata["Selection"][selected_abutment_pt_ids] = 1
+                        i_selected_ROI_mesh = i_ROI_mesh.clone().threshold('Selection', above=0.5, below=1.5, on='points')
+
+                        new_selected_cell_ids = []
+                        for i_cell_center in i_selected_ROI_mesh.cell_centers():
+                            i_cell_center = self.mesh_cms.closest_point(i_cell_center, n=1, return_point_id=True)
+                            new_selected_cell_ids.append(i_cell_center)
+                        new_selected_cell_ids = np.unique(new_selected_cell_ids)
+
+                        # undo backup
+                        self.undo_backup()
+
+                        # clean the previous cell labeled as active_label
+                        previous_selected_cell_ids = self.mesh.celldata['Label'] == active_label
+                        self.mesh.celldata['Label'][previous_selected_cell_ids] = 0
+                        # assign the new abutment cell ids to the active_label
+                        self.mesh.celldata['Label'][new_selected_cell_ids] = active_label
+
+                        self.temp_labels = self.mesh.clone().celldata[
+                            "Label"
+                        ]  # save new labels to backup labels
+
+                        self.set_mesh_color()
+                        # self.vp.show(self.mesh, resetcam=False)
+                        self.vp.show(self.mesh, camera=plt2_camera)
+
+                        self.margin_mode = False # turn off margin mode
 
         if self.tabWidget.currentIndex() == 1:  # if in swap mode
             if evt.keypress in ["s", "S"]:  # click s to show label
