@@ -303,6 +303,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.existed_opened_mesh_path = os.getcwd()
         self.texture_toggle = False
         self.margin_mode = False
+        self.margin_splines = []  # Store margin line visualizations
         self.reset_plotters()
 
         self.spinBox_brush_active_label.setRange(
@@ -637,6 +638,11 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.caption_mode = False
 
         self.selected_cell_ids = []
+        
+        # Clear margin lines
+        for line in self.margin_splines:
+            self.vp.remove(line)
+        self.margin_splines = []
 
     def selected_pt_ids_to_cell_ids(self, selected_ids):
         """
@@ -1255,6 +1261,15 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # Add the observer to the spline tool
                         sptool.AddObserver("InteractionEvent", on_widget_interaction)
                         
+                        # Also add an EndInteractionEvent observer to ensure we update at the end of interaction
+                        def on_end_interaction(obj, event):
+                            self.update_margin_visualization(sptool, i_ROI_mesh, active_label)
+                            
+                        sptool.AddObserver("EndInteractionEvent", on_end_interaction)
+                        
+                        # Initial visualization of the margin
+                        self.update_margin_visualization(sptool, i_ROI_mesh, active_label)
+                        
                         plt2.interactive()
 
                         plt2_camera = plt2.camera
@@ -1367,6 +1382,60 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # reset
                     self.caption_meshes = []
                     self.tooth_legend = []
+                    
+                    
+    def update_margin_visualization(self, spline_tool, roi_mesh, label_id):
+        """
+        Updates the visualization of projected margin lines on the main viewport
+        
+        Parameters:
+        -----------
+        spline_tool : vtkSplineWidget or similar
+            The spline tool being used for margin editing
+        roi_mesh : vedo.Mesh
+            The mesh to project the spline points onto
+        label_id : int
+            The label ID associated with this margin
+        """
+        # Clear any existing margin splines for this label
+        for spline in self.margin_splines:
+            if hasattr(spline, 'label_id') and spline.label_id == label_id:
+                self.vp.remove(spline)
+                self.margin_splines.remove(spline)
+        
+        # Get points from the spline
+        if hasattr(spline_tool, 'spline'):
+            # For vedo spline tools
+            spline_points = spline_tool.spline().points()
+        else:
+            # Fallback method if needed
+            nodes = np.array([spline_tool.representation.GetNthNodeWorldPosition(i) 
+                            for i in range(spline_tool.representation.GetNumberOfNodes())])
+            spline_points = nodes
+        
+        # Resample the spline to get more points for smoother visualization
+        resampled_spline = Spline(spline_points, closed=True, res=100)
+        
+        # Project the resampled points onto the mesh surface
+        projected_points = []
+        for pt in resampled_spline.points():
+            closest_pt = roi_mesh.closest_point(pt)
+            projected_points.append(closest_pt)
+        projected_points = np.array(projected_points)
+        
+        # Create a spline with the projected points
+        if len(projected_points) > 2:  # Need at least 3 points for a meaningful line
+            margin_spline = Spline(remove_too_close_points(projected_points), closed=True).c("black").lw(4)
+            
+            # Add a custom attribute to identify this line later
+            margin_spline.label_id = label_id
+            
+            # Add to the plotter and store in our list
+            self.vp.add(margin_spline)
+            self.margin_splines.append(margin_spline)
+            
+            # Render the update but don't reset the camera
+            self.vp.render(resetcam=False)
                         
 
     def brush_onRightClick(self, evt):
@@ -2097,6 +2166,16 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         msgBox.setWindowTitle("Error")
         msgBox.setStandardButtons(QMessageBox.Ok)
         msgBox.exec()
+        
+
+def remove_too_close_points(points, threshold=0.02):
+    too_close_points_indices = []
+    for i in range(points.shape[0]):
+        for j in range(i + 1, points.shape[0]):
+            if np.linalg.norm(points[i] - points[j]) < threshold:
+                too_close_points_indices.append(j)
+    points = np.delete(points, too_close_points_indices, axis=0)
+    return points
 
 
 def main():
