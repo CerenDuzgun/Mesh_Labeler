@@ -1175,7 +1175,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # use the boundary as initial margin (spline)
                         max_boundary_pt_ids = find_largest_boundary_cycle_from_faces(i_abutment.faces())
                         margin_pts = Points(i_abutment.points()[np.array(max_boundary_pt_ids)])
-                        margin_pts.subsample(0.05)
+                        margin_pts.subsample(0.025)
 
                         i_ROI_mesh_w_texture_components = i_ROI_mesh_w_texture.clone().split()
                         i_ROI_mesh_components = i_ROI_mesh.clone().split()
@@ -1210,7 +1210,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         plt1_camera = self.vp.camera
                         plt2 = Plotter(size=(1600, 1600))
                         plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
-                        sptool = plt2.add_spline_tool(margin_pts, closed=True, ps=16)
+                        sptool = plt2.add_spline_tool(margin_pts, closed=True, ps=16, lw=4)
                         sptool.representation.SetAlwaysOnTop(False)
 
                         # Set the camera's focal point to the center of the spline control points
@@ -1239,13 +1239,10 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                             nodes = sptool.nodes()
                             
                             # Snap all nodes to the mesh surface
-                            for i in range(len(nodes)):
-                                # Get current position
-                                pos = nodes[i]
-                                
+                            for i, pos in enumerate(nodes):
                                 # Find closest point on mesh
-                                # closest_point = i_ROI_mesh.closest_point(pos) # <-- this is the closest point on the mesh surface
-                                closest_point = Points(i_ROI_mesh.points()).closest_point(pos) # <-- this is the closest point among all the mesh points
+                                closest_point = i_ROI_mesh.closest_point(pos) # <-- this is the closest point on the mesh surface
+                                # closest_point = Points(i_ROI_mesh.points()).closest_point(pos) # <-- this is the closest point among all the mesh points
                                 
                                 # Update the node position
                                 sptool.representation.SetNthNodeWorldPosition(i, closest_point)
