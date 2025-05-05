@@ -2046,7 +2046,9 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 # save the spline points
                 for margin_spline in self.margin_splines:
                     label_id = margin_spline.label_id
-                    margin_spline.write(self.save_data_path[:-4] + "_margin_spline_{}.vtp".format(label_id))
+                    # only save the spline points if the label id > 32 for margins
+                    if label_id > 32:
+                        margin_spline.write(self.save_data_path[:-4] + "_margin_spline_{}.vtp".format(label_id))
 
                 # update status in statusBar
                 self.statusBar().showMessage("File(s) saved")
