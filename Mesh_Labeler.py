@@ -511,7 +511,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                             )
                             self.vtkWidget.setFocus()
                     else:
-                        self.show_messageBox(
+                        self.show_error_messageBox(
                             "No mesh available! Please load a mesh first!"
                         )
             except:
@@ -629,6 +629,25 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.vp.show(self.mesh, interactorStyle=0)
         self.vp.show(self.mesh, interactive=False)
 
+        # load margin curves if existing
+        sample_basename_wo_extension = os.path.splitext(os.path.basename(self.opened_mesh_path))[0]
+        sample_directory = os.path.dirname(self.opened_mesh_path)
+        sample_data_path = os.path.join(sample_directory, sample_basename_wo_extension)
+        if os.path.exists(sample_data_path):
+            # find all margin curves (vtp files) in the directory
+            possible_margin_files = [f for f in os.listdir(sample_data_path) if f.endswith('.vtp')]
+            for i_possible_margin_file in possible_margin_files:
+                if "_margin_spline_" in i_possible_margin_file:
+                    margin_spline_path = os.path.join(sample_data_path, i_possible_margin_file)
+                    margin_spline = load(margin_spline_path)
+                    margin_spline.c("green").lw(3)
+                    # extract label id from the filename
+                    label_id = int(i_possible_margin_file.split("_margin_spline_")[1].split(".")[0])
+                    print("label_id: ", label_id)
+                    margin_spline.label_id = label_id
+                    self.margin_splines.append(margin_spline)
+                    self.vp.add(margin_spline)
+
         self.show_tab_info()  # show tab information in status bar
 
     def reset_plotters(self):
@@ -695,7 +714,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
             self.vp.add(self.vedo_landmark_text)
         except:
-            self.show_messageBox(
+            self.show_error_messageBox(
                 "Check fcsv format!\nYou might see an example on the repository."
             )
 
@@ -1285,7 +1304,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                                 margin_loop.extend(path[1:])
                                 
                         except:
-                            self.show_messageBox("Cannot find the a close loop for trimming!" \
+                            self.show_error_messageBox("Cannot find the a close loop for trimming!" \
                             "\nPlease try another spline or add more points on spline.")
 
                         two_ROI_meshes_pt_ids = separate_mesh(i_ROI_mesh, margin_loop) # return 2 pieces of meshes
@@ -1400,20 +1419,19 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         
         # For our ProjectedSplineTool, the points are already projected
         if isinstance(spline_tool, ProjectedSplineTool):
-            projected_points = spline_points
             margin_spline = spline_tool.spline()
         else:
-            # For other tools, project the points onto the mesh
+            raise ValueError("Unsupported spline tool type, still under development.")
+            # # For other tools, project the points onto the mesh
+            # # Project the points onto the mesh surface
+            # projected_points = []
+            # for pt in spline_points:
+            #     closest_pt = roi_mesh.closest_point(pt)
+            #     projected_points.append(closest_pt)
+            # projected_points = np.array(projected_points)
             
-            # Project the points onto the mesh surface
-            projected_points = []
-            for pt in spline_points:
-                closest_pt = roi_mesh.closest_point(pt)
-                projected_points.append(closest_pt)
-            projected_points = np.array(projected_points)
-            
-            non_duplicate_projected_points = remove_too_close_points(projected_points)
-            margin_spline = Spline(non_duplicate_projected_points, closed=True).c("black").lw(4)
+            # non_duplicate_projected_points = remove_too_close_points(projected_points)
+            # margin_spline = Spline(non_duplicate_projected_points, closed=True).c("black").lw(4)
             
         # Add a custom attribute to identify this line later
         margin_spline.label_id = label_id
@@ -1857,7 +1875,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             ]  # update spline active label
             self.vtkWidget.setFocus()
         else:
-            self.show_messageBox('Label ID does not exist!')
+            self.show_error_messageBox('Label ID does not exist!')
             # set the value back to the previous one
             self.spinBox_brush_active_label.setValue(self.brush_active_label[0])
 
@@ -1874,7 +1892,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.spinBox_swap_new_label.value()
             ]  # update swap new label
         else:
-            self.show_messageBox('Label ID does not exist!')
+            self.show_error_messageBox('Label ID does not exist!')
             # set the value back to the previous one
             self.spinBox_swap_new_label.setValue(self.swap_new_label[0])
 
@@ -2042,19 +2060,33 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # reset, don't call reset_plotters() becuase we don't want to delete current plotter
                         self.brush_mode = False
                         self.selected_cell_ids = []
-                        
+                
+                sample_basename_wo_extension = os.path.splitext(os.path.basename(self.save_data_path))[0]
+                sample_directory = os.path.dirname(self.save_data_path)
+                sample_data_path = os.path.join(sample_directory, sample_basename_wo_extension)
+                if not os.path.exists(sample_data_path):
+                    os.makedirs(sample_data_path)
                 # save the spline points
+                i_saved_count = 0
                 for margin_spline in self.margin_splines:
                     label_id = margin_spline.label_id
                     # only save the spline points if the label id > 32 for margins
                     if label_id > 32:
-                        margin_spline.write(self.save_data_path[:-4] + "_margin_spline_{}.vtp".format(label_id))
+                        margin_spline.write(
+                            os.path.join(sample_data_path, sample_basename_wo_extension + "_margin_spline_{}.vtp".format(label_id))
+                        )
+                        if os.path.exists(os.path.join(sample_data_path, sample_basename_wo_extension + "_margin_spline_{}.vtp".format(label_id))):
+                            i_saved_count += 1
+
+                self.show_info_messageBox(
+                    'Number of margin splines saved: {}\nSaved to: {}'.format(i_saved_count, sample_data_path)
+                )
 
                 # update status in statusBar
                 self.statusBar().showMessage("File(s) saved")
                 self.vtkWidget.setFocus()
         except Exception as e:
-            self.show_messageBox("Error: {}".format(e))
+            self.show_error_messageBox("Error: {}".format(e))
 
     @Qt.pyqtSlot()
     def load_landmarking(self):
@@ -2097,7 +2129,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     )
                     self.vtkWidget.setFocus()
         else:
-            self.show_messageBox("No mesh available! Please load a mesh first!")
+            self.show_error_messageBox("No mesh available! Please load a mesh first!")
 
     @Qt.pyqtSlot()
     def save_landmarking(self):
@@ -2148,17 +2180,26 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.statusBar().showMessage("Landmarking file saved")
                     self.vtkWidget.setFocus()
             else:
-                self.show_messageBox(
+                self.show_error_messageBox(
                     "No landmark available! Please create/load a landmark first!"
                 )
         else:
-            self.show_messageBox("No mesh available! Please load a mesh first!")
+            self.show_error_messageBox("No mesh available! Please load a mesh first!")
 
-    def show_messageBox(self, shown_str):
+    def show_error_messageBox(self, shown_str):
         msgBox = QMessageBox()
         msgBox.setIcon(QMessageBox.Critical)
         msgBox.setText(shown_str)
         msgBox.setWindowTitle("Error")
+        msgBox.setStandardButtons(QMessageBox.Ok)
+        msgBox.exec()
+
+
+    def show_info_messageBox(self, shown_str):
+        msgBox = QMessageBox()
+        msgBox.setIcon(QMessageBox.Information)
+        msgBox.setText(shown_str)
+        msgBox.setWindowTitle("Info")
         msgBox.setStandardButtons(QMessageBox.Ok)
         msgBox.exec()
         
