@@ -1401,6 +1401,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         # For our ProjectedSplineTool, the points are already projected
         if isinstance(spline_tool, ProjectedSplineTool):
             projected_points = spline_points
+            margin_spline = spline_tool.spline()
         else:
             # For other tools, project the points onto the mesh
             
@@ -1410,21 +1411,19 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 closest_pt = roi_mesh.closest_point(pt)
                 projected_points.append(closest_pt)
             projected_points = np.array(projected_points)
-
-        # Create a spline with the projected points
-        if len(projected_points) > 2:  # Need at least 3 points for a meaningful line
+            
             non_duplicate_projected_points = remove_too_close_points(projected_points)
             margin_spline = Spline(non_duplicate_projected_points, closed=True).c("black").lw(4)
             
-            # Add a custom attribute to identify this line later
-            margin_spline.label_id = label_id
-            
-            # Add to the plotter and store in our list
-            self.vp.add(margin_spline)
-            self.margin_splines.append(margin_spline)
-            
-            # Render the update but don't reset the camera
-            self.vp.render(resetcam=False)
+        # Add a custom attribute to identify this line later
+        margin_spline.label_id = label_id
+        
+        # Add to the plotter and store in our list
+        self.vp.add(margin_spline)
+        self.margin_splines.append(margin_spline)
+        
+        # Render the update but don't reset the camera
+        self.vp.render(resetcam=False)
                         
 
     def brush_onRightClick(self, evt):
@@ -2267,6 +2266,14 @@ class ProjectedSplineTool:
             non_duplicate_projected_points, 
             closed=self.closed,
         ).c("green").lw(3)
+        
+        # Project the spline to the mesh again
+        projected_points = []
+        for pt in self.projected_spline.points():
+            closest_pt = self.target_mesh.closest_point(pt)
+            projected_points.append(closest_pt)
+        projected_points = np.array(projected_points)
+        self.projected_spline.points(projected_points)
         
         self.projected_spline.PickableOff() # Disable picking for the projected spline
         
