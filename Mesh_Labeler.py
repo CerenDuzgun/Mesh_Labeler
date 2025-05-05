@@ -2043,12 +2043,17 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # reset, don't call reset_plotters() becuase we don't want to delete current plotter
                         self.brush_mode = False
                         self.selected_cell_ids = []
+                        
+                # save the spline points
+                for margin_spline in self.margin_splines:
+                    label_id = margin_spline.label_id
+                    margin_spline.write(self.save_data_path[:-4] + "_margin_spline_{}.vtp".format(label_id))
 
                 # update status in statusBar
                 self.statusBar().showMessage("File(s) saved")
                 self.vtkWidget.setFocus()
-        except:
-            self.show_messageBox("No mesh available! Please load a mesh first!")
+        except Exception as e:
+            self.show_messageBox("Error: {}".format(e))
 
     @Qt.pyqtSlot()
     def load_landmarking(self):
