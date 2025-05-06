@@ -20,6 +20,7 @@ import time
 import trimesh
 from sklearn.neighbors import KNeighborsRegressor
 from scipy.linalg import svd
+from scipy.spatial import cKDTree
 
 def mesh_to_nx(mesh):
     G = nx.Graph()
@@ -303,6 +304,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.existed_opened_mesh_path = os.getcwd()
         self.texture_toggle = False
         self.margin_mode = False
+        self.margin_splines = []  # Store margin line visualizations
         self.reset_plotters()
 
         self.spinBox_brush_active_label.setRange(
@@ -509,7 +511,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                             )
                             self.vtkWidget.setFocus()
                     else:
-                        self.show_messageBox(
+                        self.show_error_messageBox(
                             "No mesh available! Please load a mesh first!"
                         )
             except:
@@ -627,6 +629,25 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.vp.show(self.mesh, interactorStyle=0)
         self.vp.show(self.mesh, interactive=False)
 
+        # load margin curves if existing
+        sample_basename_wo_extension = os.path.splitext(os.path.basename(self.opened_mesh_path))[0]
+        sample_directory = os.path.dirname(self.opened_mesh_path)
+        sample_data_path = os.path.join(sample_directory, sample_basename_wo_extension)
+        if os.path.exists(sample_data_path):
+            # find all margin curves (vtp files) in the directory
+            possible_margin_files = [f for f in os.listdir(sample_data_path) if f.endswith('.vtp')]
+            for i_possible_margin_file in possible_margin_files:
+                if "_margin_spline_" in i_possible_margin_file:
+                    margin_spline_path = os.path.join(sample_data_path, i_possible_margin_file)
+                    margin_spline = load(margin_spline_path)
+                    margin_spline.c("green").lw(3)
+                    # extract label id from the filename
+                    label_id = int(i_possible_margin_file.split("_margin_spline_")[1].split(".")[0])
+                    print("label_id: ", label_id)
+                    margin_spline.label_id = label_id
+                    self.margin_splines.append(margin_spline)
+                    self.vp.add(margin_spline)
+
         self.show_tab_info()  # show tab information in status bar
 
     def reset_plotters(self):
@@ -637,6 +658,11 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.caption_mode = False
 
         self.selected_cell_ids = []
+        
+        # Clear margin lines
+        for line in self.margin_splines:
+            self.vp.remove(line)
+        self.margin_splines = []
 
     def selected_pt_ids_to_cell_ids(self, selected_ids):
         """
@@ -688,7 +714,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
 
             self.vp.add(self.vedo_landmark_text)
         except:
-            self.show_messageBox(
+            self.show_error_messageBox(
                 "Check fcsv format!\nYou might see an example on the repository."
             )
 
@@ -1208,10 +1234,11 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         i_ROI_mesh_w_texture.pointdata.select("RGB")
 
                         plt1_camera = self.vp.camera
-                        plt2 = Plotter(size=(1600, 1600))
+                        plt2 = Plotter(size=(2400, 1600))
                         plt2.show(i_ROI_mesh_w_texture, interactive=False, camera=plt1_camera)
-                        sptool = plt2.add_spline_tool(margin_pts, closed=True, ps=16)
-                        sptool.representation.SetAlwaysOnTop(False)
+                        
+                        # Use the ProjectedSplineTool instead of the standard spline tool
+                        sptool = ProjectedSplineTool(plt2, margin_pts, i_ROI_mesh, closed=True, ps=24, lw=10)
 
                         # Set the camera's focal point to the center of the spline control points
                         spline_center = np.mean(sptool.nodes(), axis=0)
@@ -1229,36 +1256,21 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # Update the camera and render
                         plt2.renderer.ResetCamera()
                         plt2.render()
-
-                        # Add an observer for the interaction event
-                        def on_widget_interaction(obj, event):
-                            # This is called whenever the spline is modified
-                            # print("Widget interaction detected") # Debugging
-                            
-                            # Get the current nodes from the spline tool
-                            nodes = sptool.nodes()
-                            
-                            # Snap all nodes to the mesh surface
-                            for i in range(len(nodes)):
-                                # Get current position
-                                pos = nodes[i]
-                                
-                                # Find closest point on mesh
-                                # closest_point = i_ROI_mesh.closest_point(pos) # <-- this is the closest point on the mesh surface
-                                closest_point = Points(i_ROI_mesh.points()).closest_point(pos) # <-- this is the closest point among all the mesh points
-                                
-                                # Update the node position
-                                sptool.representation.SetNthNodeWorldPosition(i, closest_point)
-                                # print(f"Snapped node {i} to mesh") # Debugging
-                            
-                            # Rebuild the representation
-                            sptool.representation.BuildRepresentation()
-                            plt2.render()
-
-                        # Add the observer to the spline tool
-                        sptool.AddObserver("InteractionEvent", on_widget_interaction)
                         
+                        # Also add an EndInteractionEvent observer to ensure we update at the end of interaction
+                        def on_end_interaction(obj, event):
+                            self.update_margin_visualization(sptool, i_ROI_mesh, active_label)
+                            
+                        sptool.sptool.AddObserver("EndInteractionEvent", on_end_interaction)
+                        
+                        # Initial visualization of the margin
+                        self.update_margin_visualization(sptool, i_ROI_mesh, active_label)
+                        
+                        # When entering spline edit mode
+                        i_ROI_mesh_w_texture.PickableOff()  # Disable picking for the mesh
                         plt2.interactive()
+                        # When exiting spline edit mode
+                        i_ROI_mesh_w_texture.PickableOn()   # Re-enable picking for the mesh
 
                         plt2_camera = plt2.camera
                         # plt2.close() # close the plotter and remove the spline tool
@@ -1266,7 +1278,8 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # resample the spline points
                         print(f'original spline draggable points number: {len(sptool.nodes())}')
                         print(f'original spline all points number: {len(sptool.spline().points())}')
-                        resampled_spline = Spline(sptool.spline().points(), closed=True, res=100)
+                        non_duplicate_spline_points = remove_too_close_points(sptool.spline().points())
+                        resampled_spline = Spline(non_duplicate_spline_points, closed=True, res=100)
                         print(f'resampled spline points number: {len(resampled_spline.points())}')
 
                         # project all margin.points() on the mesh
@@ -1291,7 +1304,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                                 margin_loop.extend(path[1:])
                                 
                         except:
-                            self.show_messageBox("Cannot find the a close loop for trimming!" \
+                            self.show_error_messageBox("Cannot find the a close loop for trimming!" \
                             "\nPlease try another spline or add more points on spline.")
 
                         two_ROI_meshes_pt_ids = separate_mesh(i_ROI_mesh, margin_loop) # return 2 pieces of meshes
@@ -1370,6 +1383,65 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # reset
                     self.caption_meshes = []
                     self.tooth_legend = []
+                    
+                    
+    def update_margin_visualization(self, spline_tool, roi_mesh, label_id):
+        """
+        Updates the visualization of projected margin lines on the main viewport
+        
+        Parameters:
+        -----------
+        spline_tool : ProjectedSplineTool or vtkSplineWidget
+            The spline tool being used for margin editing
+        roi_mesh : vedo.Mesh
+            The mesh to project the spline points onto
+        label_id : int
+            The label ID associated with this margin
+        """
+        # Clear any existing margin splines for this label
+        for spline in self.margin_splines:
+            if hasattr(spline, 'label_id') and spline.label_id == label_id:
+                self.vp.remove(spline)
+                self.margin_splines.remove(spline)
+        
+        # Get points from the spline
+        if isinstance(spline_tool, ProjectedSplineTool):
+            # For our custom ProjectedSplineTool
+            spline_points = spline_tool.spline().points()
+        elif hasattr(spline_tool, 'spline'):
+            # For standard vedo spline tools
+            spline_points = spline_tool.spline().points()
+        else:
+            # Fallback method for vtkSplineWidget
+            nodes = np.array([spline_tool.representation.GetNthNodeWorldPosition(i) 
+                            for i in range(spline_tool.representation.GetNumberOfNodes())])
+            spline_points = nodes
+        
+        # For our ProjectedSplineTool, the points are already projected
+        if isinstance(spline_tool, ProjectedSplineTool):
+            margin_spline = spline_tool.spline()
+        else:
+            raise ValueError("Unsupported spline tool type, still under development.")
+            # # For other tools, project the points onto the mesh
+            # # Project the points onto the mesh surface
+            # projected_points = []
+            # for pt in spline_points:
+            #     closest_pt = roi_mesh.closest_point(pt)
+            #     projected_points.append(closest_pt)
+            # projected_points = np.array(projected_points)
+            
+            # non_duplicate_projected_points = remove_too_close_points(projected_points)
+            # margin_spline = Spline(non_duplicate_projected_points, closed=True).c("black").lw(4)
+            
+        # Add a custom attribute to identify this line later
+        margin_spline.label_id = label_id
+        
+        # Add to the plotter and store in our list
+        self.vp.add(margin_spline)
+        self.margin_splines.append(margin_spline)
+        
+        # Render the update but don't reset the camera
+        self.vp.render(resetcam=False)
                         
 
     def brush_onRightClick(self, evt):
@@ -1803,7 +1875,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             ]  # update spline active label
             self.vtkWidget.setFocus()
         else:
-            self.show_messageBox('Label ID does not exist!')
+            self.show_error_messageBox('Label ID does not exist!')
             # set the value back to the previous one
             self.spinBox_brush_active_label.setValue(self.brush_active_label[0])
 
@@ -1820,7 +1892,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.spinBox_swap_new_label.value()
             ]  # update swap new label
         else:
-            self.show_messageBox('Label ID does not exist!')
+            self.show_error_messageBox('Label ID does not exist!')
             # set the value back to the previous one
             self.spinBox_swap_new_label.setValue(self.swap_new_label[0])
 
@@ -1988,12 +2060,33 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         # reset, don't call reset_plotters() becuase we don't want to delete current plotter
                         self.brush_mode = False
                         self.selected_cell_ids = []
+                
+                sample_basename_wo_extension = os.path.splitext(os.path.basename(self.save_data_path))[0]
+                sample_directory = os.path.dirname(self.save_data_path)
+                sample_data_path = os.path.join(sample_directory, sample_basename_wo_extension)
+                if not os.path.exists(sample_data_path):
+                    os.makedirs(sample_data_path)
+                # save the spline points
+                i_saved_count = 0
+                for margin_spline in self.margin_splines:
+                    label_id = margin_spline.label_id
+                    # only save the spline points if the label id > 32 for margins
+                    if label_id > 32:
+                        margin_spline.write(
+                            os.path.join(sample_data_path, sample_basename_wo_extension + "_margin_spline_{}.vtp".format(label_id))
+                        )
+                        if os.path.exists(os.path.join(sample_data_path, sample_basename_wo_extension + "_margin_spline_{}.vtp".format(label_id))):
+                            i_saved_count += 1
+
+                self.show_info_messageBox(
+                    'Number of margin splines saved: {}\nSaved to: {}'.format(i_saved_count, sample_data_path)
+                )
 
                 # update status in statusBar
                 self.statusBar().showMessage("File(s) saved")
                 self.vtkWidget.setFocus()
-        except:
-            self.show_messageBox("No mesh available! Please load a mesh first!")
+        except Exception as e:
+            self.show_error_messageBox("Error: {}".format(e))
 
     @Qt.pyqtSlot()
     def load_landmarking(self):
@@ -2036,7 +2129,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     )
                     self.vtkWidget.setFocus()
         else:
-            self.show_messageBox("No mesh available! Please load a mesh first!")
+            self.show_error_messageBox("No mesh available! Please load a mesh first!")
 
     @Qt.pyqtSlot()
     def save_landmarking(self):
@@ -2087,19 +2180,206 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     self.statusBar().showMessage("Landmarking file saved")
                     self.vtkWidget.setFocus()
             else:
-                self.show_messageBox(
+                self.show_error_messageBox(
                     "No landmark available! Please create/load a landmark first!"
                 )
         else:
-            self.show_messageBox("No mesh available! Please load a mesh first!")
+            self.show_error_messageBox("No mesh available! Please load a mesh first!")
 
-    def show_messageBox(self, shown_str):
+    def show_error_messageBox(self, shown_str):
         msgBox = QMessageBox()
         msgBox.setIcon(QMessageBox.Critical)
         msgBox.setText(shown_str)
         msgBox.setWindowTitle("Error")
         msgBox.setStandardButtons(QMessageBox.Ok)
         msgBox.exec()
+
+
+    def show_info_messageBox(self, shown_str):
+        msgBox = QMessageBox()
+        msgBox.setIcon(QMessageBox.Information)
+        msgBox.setText(shown_str)
+        msgBox.setWindowTitle("Info")
+        msgBox.setStandardButtons(QMessageBox.Ok)
+        msgBox.exec()
+        
+        
+class ProjectedSplineTool:
+    """
+    A custom spline tool that projects all points to a mesh surface
+    """
+    def __init__(
+        self, 
+        plotter: Plotter, 
+        initial_points: Points, 
+        mesh: Mesh, 
+        closed: bool = True, 
+        ps: int = 16, 
+        lw: int = 4
+        ):
+        """
+        Initialize the projected spline tool
+        
+        Parameters:
+        -----------
+        plotter : vedo.Plotter
+            The plotter to add the spline tool to
+        initial_points : vedo.Points
+            The initial points for the spline
+        mesh : vedo.Mesh
+            The mesh to project points onto
+        closed : bool, optional
+            Whether the spline should be closed
+        ps : int, optional
+            Point size for control points
+        lw : int, optional
+            Line width for the spline
+        """
+        self.plotter = plotter
+        self.target_mesh = mesh
+        self.closed = closed
+        
+        # Project initial points to the mesh
+        projected_points = []
+        for pt in initial_points.points():
+            closest_pt = self.target_mesh.closest_point(pt)
+            projected_points.append(closest_pt)
+        
+        # Create a vedo spline tool with the projected points
+        self.sptool = self.plotter.add_spline_tool(Points(projected_points), closed=closed, ps=ps, lw=lw)
+        self.sptool.representation.SetAlwaysOnTop(True)  # Visualization of the underlying sptool
+        self.sptool.representation.PickableOff()  # First make it not pickable
+        self.sptool.representation.PickableOn()  # Then turn it back on (resets priority)
+        self.sptool.representation.SetPickable(1) # Explicitly set to pickable
+        print(f"Pixel tolerance: {self.sptool.representation.GetPixelTolerance()}")
+        self.sptool.representation.SetPixelTolerance(15)
+        
+        # Create a visual spline (fully projected)
+        self.projected_spline = None
+        self.update_projected_spline()
+        
+        # Add observers for interaction
+        self.sptool.AddObserver("InteractionEvent", self.on_interaction)
+        self.sptool.AddObserver("EndInteractionEvent", self.on_end_interaction)
+    
+    def on_interaction(self, obj, event):
+        """Callback for when the spline is being interacted with"""
+        # Snap control nodes to the mesh
+        nodes = self.sptool.nodes()
+        for i, pos in enumerate(nodes):
+            closest_point = self.target_mesh.closest_point(pos)
+            self.sptool.representation.SetNthNodeWorldPosition(i, closest_point)
+        
+        # Update the representation
+        self.sptool.representation.BuildRepresentation()
+        
+        # Update the projected spline visualization
+        self.update_projected_spline()
+    
+    def on_end_interaction(self, obj, event):
+        """Callback for when interaction with the spline has ended"""
+        # Use the same logic as during interaction
+        self.on_interaction(obj, event)
+        
+        # Additional end-of-interaction logic can go here
+        # e.g., updating a master viewport or saving the result
+    
+    def update_projected_spline(self):
+        """Update the fully projected spline visualization"""
+        # Remove the old projected spline if it exists
+        if self.projected_spline is not None:
+            self.plotter.remove(self.projected_spline)
+        
+        # Get the current spline
+        original_spline = self.sptool.spline()
+        
+        # Get the points of the spline
+        spline_points = original_spline.points()
+        
+        # Project each point to the mesh
+        projected_points = []
+        for pt in spline_points:
+            closest_pt = self.target_mesh.closest_point(pt)
+            projected_points.append(closest_pt)
+        projected_points = np.array(projected_points)
+        
+        # Create a new spline with the projected points
+        non_duplicate_projected_points = remove_too_close_points(projected_points)
+        self.projected_spline = Spline(
+            non_duplicate_projected_points, 
+            closed=self.closed,
+        ).c("green").lw(3)
+        
+        # Project the spline to the mesh again
+        projected_points = []
+        for pt in self.projected_spline.points():
+            closest_pt = self.target_mesh.closest_point(pt)
+            projected_points.append(closest_pt)
+        projected_points = np.array(projected_points)
+        self.projected_spline.points(projected_points)
+        
+        self.projected_spline.PickableOff() # Disable picking for the projected spline
+        
+        # Add the projected spline to the visualization
+        self.plotter.add(self.projected_spline)
+        
+        # # set opacity of original spline to 0.5
+        # self.sptool.representation.GetLinesProperty().SetOpacity(0.5)
+        
+        # Render to show the updated visualization
+        self.plotter.render()
+    
+    def spline(self):
+        """Get the fully projected spline"""
+        return self.projected_spline
+    
+    def nodes(self):
+        """Get the control nodes of the spline tool"""
+        return self.sptool.nodes()
+        
+
+def remove_too_close_points(points, threshold=0.02):
+    """
+    Efficiently removes points that are closer than the threshold distance.
+    
+    Parameters:
+    -----------
+    points : numpy.ndarray
+        Array of points with shape (n, m) where n is the number of points
+        and m is the dimension of each point (typically 3 for 3D points)
+    threshold : float, optional
+        Distance threshold below which points are considered too close
+        
+    Returns:
+    --------
+    numpy.ndarray
+        Array of points with too-close points removed
+    """
+    if len(points) <= 1:
+        return points
+    
+    # Initialize array to mark points for keeping
+    keep = np.ones(len(points), dtype=bool)
+    
+    # Use spatial indexing for faster neighbor searches
+    tree = cKDTree(points)
+    
+    # For each point, find neighbors within threshold distance
+    for i in range(len(points)):
+        # If this point is already marked for removal, skip it
+        if not keep[i]:
+            continue
+        
+        # Find all points within threshold distance
+        neighbors = tree.query_ball_point(points[i], threshold)
+        
+        # The point itself will be included in neighbors, so exclude it
+        for j in neighbors:
+            if j > i:  # Only mark points with higher indices to avoid redundant checks
+                keep[j] = False
+    
+    # Return only the points marked for keeping
+    return points[keep]
 
 
 def main():
