@@ -3,9 +3,10 @@ import sys, os
 # from PyQt5 import *
 from PyQt5 import Qt
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QFileDialog, QMessageBox, QShortcut, QAbstractItemView
+from PyQt5.QtWidgets import QFileDialog, QMessageBox, QShortcut, QAbstractItemView, QInputDialog
 from vtk.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 import pandas as pd
+import json
 import numpy as np
 import vtk
 from vtk.util import numpy_support
@@ -121,7 +122,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         )
         self.spinBox_swap_new_label.setRange(min(self.label_id), max(self.label_id))
         # default active label = 0
-        self.brush_active_label = [0]  
+        self.brush_active_label = [0]
         self.swap_original_label = [0]
         self.swap_new_label = [0]
 
@@ -175,7 +176,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButton_load.setStyleSheet(
             "QPushButton{font: 75 20px}, QToolTip{color: k ; font: 12px}"
         )  # set different font on tool tip
-        self.pushButton_save.setToolTip("Save a mesh (.vtp, .stl, or .obj)")
+        self.pushButton_save.setToolTip("Save a mesh (.vtp, .stl, .obj, .json)")
         self.pushButton_save.setStyleSheet(
             "QPushButton{font: 75 20px}, QToolTip{color: k ; font: 12px}"
         )  # set different font on tool tip
@@ -185,7 +186,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         # if changing tab, show tab information
         self.tabWidget.currentChanged.connect(
             self.show_tab_info
-        )  
+        )
         self.spinBox_brush_active_label.setKeyboardTracking(False)
         self.spinBox_swap_original_label.setKeyboardTracking(False)
         self.spinBox_swap_new_label.setKeyboardTracking(False)
@@ -241,6 +242,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
     # general functions
     ########################
     def dragEnterEvent(self, event):
+
         if event.mimeData().hasUrls():
             event.accept()
         else:
@@ -455,7 +457,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             lmk_df = pd.read_csv(
                 self.opened_landmarking_path, header=header, skiprows=skiprows, dtype=data_type
             )
-        
+
             num_landmarks = len(lmk_df)
             landmarks = np.zeros([num_landmarks, 3], dtype=np.float32)
 
@@ -868,7 +870,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                                     alpha=1,)
                                 i_cap.name = f"cap_{i_label}" # <-- this is assigned name for i_seg instead of i_cap
                                 self.tooth_legend.append(i_cap)
-                    
+
                     self.vp.add(self.tooth_legend).render()
                 else:
                     self.vp.remove(self.caption_meshes)
@@ -877,7 +879,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                     # reset
                     self.caption_meshes = []
                     self.tooth_legend = []
-                        
+
 
     def brush_onRightClick(self, evt):
         if self.tabWidget.currentIndex() == 0:  # if in segmentation mode
@@ -1050,12 +1052,12 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
         if self.tabWidget.currentIndex() == 0:  # if in segmentation mode
             if self.brush_mode == True:
                 if self.shift_pressed:
-                    
+
                     # show brush ball
                     p = evt.picked3d
                     if p is None:
                         return
-                    
+
                     print('shift pressed for filling model', p)
                     selected_filling_pt_id = self.mesh.closest_point(p, return_point_id=True)
                     selected_filling_pt_ids = [selected_filling_pt_id]
@@ -1077,7 +1079,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         diff_cells = list(set(selected_filling_cell_ids) - set(tmp_selected_filling_cell_ids))
                         # clone the selected_filling_cell_ids list to tmp_selected_filling_cell_ids at the beginning of each iteration
                         tmp_selected_filling_cell_ids = selected_filling_cell_ids.copy()
-                        
+
                         next_round_cell_pts = mesh_cells[diff_cells]
                         next_round_cell_pts = np.unique(next_round_cell_pts)
                         for i_pt in next_round_cell_pts:
@@ -1108,7 +1110,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.brush_erased_pts = []
                 self.flattened_erased_pt_ids = []
                 # un-do process, when ctrl + z is pressed
-                if obj.GetKeySym() in ["z", "Z"]:  
+                if obj.GetKeySym() in ["z", "Z"]:
                     self.undo_recover()
 
 
@@ -1399,6 +1401,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
             None, "Open File", self.opened_mesh_path, "Mesh Files (*.vtp *.stl *.obj *.ply)"
         )
 
+
         try:
             if self.opened_mesh_path[-4:].lower() in [
                 ".vtp",
@@ -1417,6 +1420,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.vtkWidget.setFocus()
         except:
             None  # it won't happen, because we only allow to load four types of mesh file
+
 
     @Qt.pyqtSlot()
     def save_mesh(self):
@@ -1445,7 +1449,7 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                                 self.save_data_path
                             )
                         )
-                        # reset, don't call reset_plotters() becuase we don't want to delete current plotter
+                        # reset, don't call reset_plotters() because we don't want to delete current plotter
                         self.brush_mode = False
                         self.selected_cell_ids = []
 
@@ -1494,6 +1498,62 @@ class Mesh_Labeler(QtWidgets.QMainWindow, Ui_MainWindow):
                         self.brush_mode = False
                         self.selected_cell_ids = []
 
+
+                elif self.comboBox_save_type.currentText() == "JSON":
+
+                    self.save_data_path, _ = QFileDialog.getSaveFileName(
+
+                        None, "Save Labels as JSON", self.existed_opened_mesh_path[:-4], "JSON Files (*.json)"
+
+                    )
+
+                    if self.save_data_path:
+
+                        # Etiketleri JSON formatında kaydet
+
+                        labels = self.mesh.celldata["Label"]
+
+                        if isinstance(labels, np.ndarray):
+                            labels = labels.tolist()
+
+                        file_name = os.path.splitext(os.path.basename(self.opened_mesh_path))[0]
+                        parts = file_name.split("_")
+
+
+                        self.patient_id = parts[0]
+                        if parts[1] == "U":
+                            self.jaw = "Upper"
+                        elif parts[1] == "L":
+                            self.jaw = "Lower"
+                        else:
+                            self.jaw = "None"
+
+
+                        json_data = {
+
+                            "id_patient": self.patient_id,
+
+                            "jaw": self.jaw,
+
+                            "labels": labels
+
+                        }
+
+                        with open(self.save_data_path, "w") as f:
+
+                            json.dump(json_data, f, indent=None, separators=(",", ":"))
+
+
+
+                        self.setWindowTitle(
+
+                            "Mesh Labeler (open source) -- {}".format(self.save_data_path)
+
+                        )
+
+                        self.brush_mode = False
+
+                        self.selected_cell_ids = []
                 # update status in statusBar
                 self.statusBar().showMessage("File(s) saved")
                 self.vtkWidget.setFocus()
